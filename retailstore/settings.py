@@ -25,7 +25,7 @@ SECRET_KEY = '9uv_n_vre2=w&4zw$a7sh!ifx5((ww9h)z%-z+zmw#79q0pmze'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = [".awsapprunner.com"]
+ALLOWED_HOSTS = ['reinvent-retails-env.eba-muckc2k3.us-east-1.elasticbeanstalk.com']
 
 
 # Application definition
@@ -52,8 +52,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
 
 ROOT_URLCONF = 'retailstore.urls'
@@ -134,16 +132,6 @@ STATICFILES_DIRS = [
     'retailstore/static',
 ]
 
-# apprunner storage
-STORAGES = {
-    "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
-    },
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-    },
-}
-
 # media files 
 MEDIA_URL = '/media/' 
 MEDIA_ROOT = BASE_DIR / 'media'
@@ -160,3 +148,5 @@ EMAIL_PORT = 587
 EMAIL_HOST_USER = 'xxxx@gmail.com'
 EMAIL_HOST_PASSWORD = 'yyyy'
 EMAIL_USE_TLS = True
+
+DEFAULT_AUTO_FIELD='django.db.models.AutoField'
