@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/3.1/ref/settings/
 
 from pathlib import Path
 import os
+from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve(strict=True).parent.parent
@@ -86,7 +87,7 @@ AUTH_USER_MODEL = 'accounts.Account'
 # RDS Configuration
 if 'RDS_DB_NAME' in os.environ:
     DATABASES = {
-        'default': {
+        'ebdb': {
             'ENGINE': 'django.db.backends.mysql',
             'NAME': os.environ['RDS_DB_NAME'],
             'USER': os.environ['RDS_USERNAME'],
@@ -103,7 +104,16 @@ else:
         }
     }
 
-
+# DATABASES = {
+#         'default': {
+#             'ENGINE': 'django.db.backends.mysql',
+#             'NAME': 'ebdb',
+#             'USER': 'retailsdbuser',
+#             'PASSWORD': 'Test123$',
+#             'HOST': 'awseb-e-bxthhmvv8m-stack-awsebrdsdatabase-bo7nnfrr7lfl.cfwjo1z2fxkb.us-east-1.rds.amazonaws.com',
+#             'PORT': '3306',
+#         }
+#     }
 
 # Password validation
 # https://docs.djangoproject.com/en/3.1/ref/settings/#auth-password-validators
@@ -141,11 +151,32 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/3.1/howto/static-files/
 
-STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR / 'static'
+# STATIC_URL = '/static/'
+# STATIC_ROOT = BASE_DIR / 'static'
+# STATICFILES_DIRS = [
+#     'retailstore/static',
+# ]
+
+# AWS S3 Static Files Configuration
+AWS_ACCESS_KEY_ID = os.environ['AWS_ACCESS_KEY_ID']
+AWS_SECRET_ACCESS_KEY = os.environ['AWS_SECRET_ACCESS_KEY']
+AWS_SESSION_TOKEN= os.environ['AWS_SESSION_TOKEN']
+AWS_STORAGE_BUCKET_NAME = config('AWS_STORAGE_BUCKET_NAME')
+AWS_S3_CUSTOM_DOMAIN = '%s.s3.amazonaws.com' % AWS_STORAGE_BUCKET_NAME
+AWS_S3_OBJECT_PARAMETERS = {
+    'CacheControl': 'max-age=86400',
+}
+AWS_S3_FILE_OVERWRITE = False
+AWS_DEFAULT_ACL = 'public-read'
+AWS_LOCATION = 'static'
+
 STATICFILES_DIRS = [
     'retailstore/static',
 ]
+STATIC_URL = 'https://%s/%s/' % (AWS_S3_CUSTOM_DOMAIN, AWS_LOCATION)
+STATICFILES_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+
+DEFAULT_FILE_STORAGE = 'retailstore.media_store.MediaStorage'
 
 # media files 
 MEDIA_URL = '/media/' 
