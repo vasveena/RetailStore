@@ -25,7 +25,7 @@ SECRET_KEY = '9uv_n_vre2=w&4zw$a7sh!ifx5((ww9h)z%-z+zmw#79q0pmze'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [".awsapprunner.com"]
 
 
 # Application definition
@@ -52,6 +52,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
 
 ROOT_URLCONF = 'retailstore.urls'
@@ -131,6 +133,16 @@ STATIC_ROOT = BASE_DIR / 'static'
 STATICFILES_DIRS = [
     'retailstore/static',
 ]
+
+# apprunner storage
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 # media files 
 MEDIA_URL = '/media/' 
