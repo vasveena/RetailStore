@@ -87,7 +87,7 @@ AUTH_USER_MODEL = 'accounts.Account'
 # RDS Configuration
 if 'RDS_DB_NAME' in os.environ:
     DATABASES = {
-        'ebdb': {
+        'default': {
             'ENGINE': 'django.db.backends.mysql',
             'NAME': os.environ['RDS_DB_NAME'],
             'USER': os.environ['RDS_USERNAME'],
@@ -158,9 +158,9 @@ USE_TZ = True
 # ]
 
 # AWS S3 Static Files Configuration
-AWS_ACCESS_KEY_ID = os.environ['AWS_ACCESS_KEY_ID']
-AWS_SECRET_ACCESS_KEY = os.environ['AWS_SECRET_ACCESS_KEY']
-AWS_SESSION_TOKEN= os.environ['AWS_SESSION_TOKEN']
+#AWS_ACCESS_KEY_ID = os.environ['AWS_ACCESS_KEY_ID']
+#AWS_SECRET_ACCESS_KEY = os.environ['AWS_SECRET_ACCESS_KEY']
+#AWS_SESSION_TOKEN= os.environ['AWS_SESSION_TOKEN']
 AWS_STORAGE_BUCKET_NAME = config('AWS_STORAGE_BUCKET_NAME')
 AWS_S3_CUSTOM_DOMAIN = '%s.s3.amazonaws.com' % AWS_STORAGE_BUCKET_NAME
 AWS_S3_OBJECT_PARAMETERS = {
