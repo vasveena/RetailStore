@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source "/var/app/venv/*/bin/activate" && {
+source /var/app/venv/*/bin/activate && {
     
     if [[ $EB_IS_COMMAND_LEADER == "true" ]];
     then 
