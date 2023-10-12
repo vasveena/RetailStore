@@ -25,7 +25,7 @@ SECRET_KEY = '9uv_n_vre2=w&4zw$a7sh!ifx5((ww9h)z%-z+zmw#79q0pmze'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['reinvent-retails-env.eba-muckc2k3.us-east-1.elasticbeanstalk.com']
+ALLOWED_HOSTS = ['reinvent-retails-store-env.eba-zrvmhev7.us-east-1.elasticbeanstalk.com']
 
 
 # Application definition
