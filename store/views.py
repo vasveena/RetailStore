@@ -9,6 +9,11 @@ from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db.models import Q
 from django.contrib import messages
 from orders.models import OrderProduct
+import os
+from utils import bedrock, print_ww
+from langchain.llms.bedrock import Bedrock
+from langchain import PromptTemplate
+import warnings
 
 # Create your views here.
 
@@ -103,3 +108,70 @@ def submit_review(request, product_id):
                 messages.success(request, 'Thank you! Your review has been submitted.')
                 #print("in except" +url)
                 return redirect(url)
+
+def generate_description(request, product_id):
+   try:
+        single_product = Product.objects.get(id=product_id)
+        product_gallery = ProductGallery.objects.filter(product_id=single_product.id)
+   except Exception as e:
+        raise e
+   
+   context = {
+        'single_product': single_product,
+        'product_gallery': product_gallery,
+    }
+   return render(request, 'store/generate_description.html', context)
+
+def generate_product_description(request):
+    warnings.filterwarnings('ignore')
+    url = request.META.get('HTTP_REFERER')
+    try:
+        product_details = request.GET.get('product_details')
+        product_brand = request.GET.get('product_brand')
+        product_category = request.GET.get('product_category')
+        product_color = request.GET.get('product_color')
+        max_length = request.GET.get('max_length')
+
+        boto3_bedrock = bedrock.get_bedrock_client(assumed_role=os.environ.get("BEDROCK_ASSUME_ROLE", None), region=os.environ.get("AWS_DEFAULT_REGION", None))
+        inference_modifier = {
+            "max_tokens_to_sample": 4096,
+            "temperature": 0.5,
+            "top_k": 250,
+            "top_p": 1,
+            "stop_sequences": ["\n\nHuman"],
+        }
+
+        textgen_llm = Bedrock(
+            model_id="anthropic.claude-instant-v1",
+            client=boto3_bedrock,
+            model_kwargs=inference_modifier,
+        )
+        
+        # Create a prompt template that has 4 input variables for product brand, color, category and description
+        multi_var_prompt = PromptTemplate(
+            input_variables=["brand", "color", "category", "length", "details"], 
+            template="""
+                Human: Create a catchy product description for a {brand} {color} {category}. The number of words should be less than {length}. Following are the product details:  
+                <product_details>
+                {details}
+                </product_details>
+
+                Assistant:"""
+                )
+
+        # Pass in form values to the prompt template
+        prompt = multi_var_prompt.format(brand=product_brand, 
+                                         color=product_color,
+                                         category=product_category,
+                                         length=max_length,
+                                         details=product_details)
+        response = textgen_llm(prompt)
+
+        generated_description = response[response.index('\n')+1:]
+
+    except Exception as e:
+        raise e
+    request.session['product_details'] = product_details
+    request.session['generated_description'] = generated_description
+    request.session['generated_flag'] = True
+    return redirect(url)

@@ -51,7 +51,8 @@
 
 			<p>{{single_product.description}}</p>
 
-
+			<a href="{% url 'generate_description' single_product.id%}" class="btn btn-primary">Generate Product Description <i class="fa fa-file-text-o"></i></a>
+			
 			<hr>
 				<div class="row">
 					<div class="item-option-select">
@@ -83,6 +84,8 @@
 				{% endif %}
 			</article> <!-- product-info-aside .// -->
         </form>
+
+
 		</main> <!-- col.// -->
 	</div> <!-- row.// -->
 </div> <!-- card.// -->
