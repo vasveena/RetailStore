@@ -88,3 +88,17 @@ class ProductGallery(models.Model):
     class Meta:
         verbose_name = 'productgallery'
         verbose_name_plural = 'product gallery'
+
+# Create your models here.
+class GenerateDescription(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    description = models.TextField(max_length=500, blank=True)
+    created_date = models.DateTimeField(auto_now_add=True)
+    modified_date = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.product.product_name
+    
+    class Meta:
+        verbose_name = 'generatedescription'
+        verbose_name_plural = 'generatedescriptions'

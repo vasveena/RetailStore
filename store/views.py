@@ -45,6 +45,10 @@ def store(request, category_slug=None):
     return render(request, 'store/store.html', context)
 
 def product_detail(request, category_slug, product_slug):
+    request.session['generated_flag'] = False
+    request.session['product_details'] = None
+    request.session.modified = True
+
     try:
         single_product = Product.objects.get(category__slug=category_slug, slug=product_slug)
         in_cart = CartItem.objects.filter(cart__cart_id=_cart_id(request), product=single_product).exists()
@@ -112,8 +116,7 @@ def submit_review(request, product_id):
                 #print("in except" +url)
                 return redirect(url)
 
-def generate_description(request, product_id):
-          
+def generate_description(request, product_id, flag=False):
    try:
         single_product = Product.objects.get(id=product_id)
         product_gallery = ProductGallery.objects.filter(product_id=single_product.id)
@@ -124,6 +127,7 @@ def generate_description(request, product_id):
    context = {
         'single_product': single_product,
         'product_gallery': product_gallery,
+        'flag': flag,
     }
    return render(request, 'store/generate_description.html', context)
 
@@ -136,9 +140,10 @@ def generate_product_description(request, product_id):
     for variation in product_vars:
         product_colors.append(variation.variation_value)
     try:
+        product_brand = single_product.product_brand
+        product_category = single_product.category
+        product_name = single_product.product_name
         product_details = request.GET.get('product_details')
-        product_brand = request.GET.get('product_brand')
-        product_category = request.GET.get('product_category')
         max_length = request.GET.get('wordrange')
 
         #Inference parameters for Claude Anthropic
@@ -157,9 +162,9 @@ def generate_product_description(request, product_id):
         
         # Create a prompt template that has 4 input variables for product brand, color, category and description
         multi_var_prompt = PromptTemplate(
-            input_variables=["brand", "colors", "category", "length", "details"], 
+            input_variables=["brand", "colors", "category", "length", "name","details"], 
             template="""
-                Human: Create a catchy product description for a {category} from the brand {brand}. The number of words should be less than {length}. 
+                Human: Create a catchy product description for a {category} from the brand {brand}. Product name is {name}. The number of words should be less than {length}. 
                 Following are the product details:  
                 <product_details>
                 {details}
@@ -179,6 +184,7 @@ def generate_product_description(request, product_id):
                                          colors=product_colors,
                                          category=product_category,
                                          length=max_length,
+                                         name=product_name,
                                          details=product_details)
         response = textgen_llm(prompt)
 
@@ -188,8 +194,8 @@ def generate_product_description(request, product_id):
         raise e
     request.session['product_details'] = product_details
     request.session['generated_description'] = generated_description
-    request.session['generated_flag'] = True
     request.session['prompt'] = prompt
+    request.session['generated_flag'] = True
     request.session.modified = True
     return redirect(url)
 
