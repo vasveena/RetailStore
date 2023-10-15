@@ -8,6 +8,7 @@ from django.db.models import Avg, Count
 # Create your models here.
 class Product(models.Model):
     product_name = models.CharField(max_length=200, unique=True)
+    product_brand = models.CharField(max_length=200, default="reinvent")
     slug = models.SlugField(max_length=200, unique=True)
     description = models.TextField(max_length=500, blank=True)
     price = models.IntegerField()

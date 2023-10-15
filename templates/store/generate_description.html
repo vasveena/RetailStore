@@ -23,16 +23,16 @@
         </center>
 				<form action="{% url 'generate_product_description' single_product.id %}">
                         <div class="container">
-                            <h4>Current description</h4><br>
+                            <h4>Product description</h4><br>
 		                <p>{{single_product.description}}</p>
                             <h4 class="title">Generate a new product description</h4>
                             <div class="row">
                                 <div class="form-group name1 col-md-6">
                                     <br>
                                     Product Brand 
-                                    <input type="text" class="form-control" name="product_brand" id="product_brand" placeholder="Polo, Nike etc." required/><br>
+                                    <input type="text" class="form-control" name="product_brand" id="product_brand" value="{{single_product.product_brand}}" readonly/><br>
                                     Product Category
-                                    <input type="text" class="form-control" name="product_category" id="product_category" value="{{single_product.category}}" required/><br>
+                                    <input type="text" class="form-control" name="product_category" id="product_category" value="{{single_product.category}}" readonly/><br>
                                     <!-- Product Color
                                     <select class="form-control" name="product_color" id="product_color" required>
                                     {{ product_colors }}
@@ -92,7 +92,7 @@
 					{% include 'includes/alerts.html' %}
 					{% csrf_token %}
 					    <br><br>
-						<h4 class="title">Generated description</h4>
+						<h4 class="title">Generated description</h4><br>
                         <p>Review and make any necessary changes. Once you're done, save description or regenerate a new description.</p>				
 							<textarea rows="6" class="form-control" name="generated_description">{{ request.session.generated_description }}</textarea>
 							<br>
