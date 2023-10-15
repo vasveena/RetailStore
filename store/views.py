@@ -17,6 +17,8 @@ import warnings
 
 # Create your views here.
 
+boto3_bedrock = bedrock.get_bedrock_client(assumed_role=os.environ.get("BEDROCK_ASSUME_ROLE", None), region=os.environ.get("AWS_DEFAULT_REGION", None))
+
 def store(request, category_slug=None):
     categories = None
     products = None
@@ -132,7 +134,6 @@ def generate_product_description(request):
         product_color = request.GET.get('product_color')
         max_length = request.GET.get('max_length')
 
-        boto3_bedrock = bedrock.get_bedrock_client(assumed_role=os.environ.get("BEDROCK_ASSUME_ROLE", None), region=os.environ.get("AWS_DEFAULT_REGION", None))
         inference_modifier = {
             "max_tokens_to_sample": 4096,
             "temperature": 0.5,
