@@ -55,6 +55,7 @@
 			<a href="{% url 'generate_description' single_product.id%}" class="btn btn-primary">Generate Product Description <i class="fa fa-file-text-o"></i></a>
 			
 			<hr>
+			<div class="container"> 
 				<div class="row">
 					<div class="item-option-select">
 						<h6>Choose Color</h6>
@@ -77,6 +78,7 @@
 						</select>
 					</div>
 				</div> <!-- row.// -->
+			</div>
 				<hr>
 				{% if single_product.stock <= 0 %}
 				<h5 class="text-danger">Out of Stock</h5>
