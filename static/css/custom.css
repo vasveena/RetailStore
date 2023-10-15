@@ -59,3 +59,14 @@
     height: 80px;
     border: 1px solid grey;
   }
+
+  .box {
+    height: 1500px;
+    width: 2000px;
+  }
+
+  input[type="text"] {  
+    width: 30%;
+    display: inline-block;
+    margin-right:20px; 
+    }

@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect
-from .models import Product, ReviewRating, ProductGallery
+from .models import Product, ReviewRating, ProductGallery, Variation
 from .forms import ReviewForm
 from category.models import Category
 from django.shortcuts import get_object_or_404
@@ -112,15 +112,27 @@ def submit_review(request, product_id):
                 return redirect(url)
 
 def generate_description(request, product_id):
+
+#    if 'generated_flag' in request.session:
+#        print("poppin")
+#        request.session['generated_flag'] = False
+#        request.session.modified = True
+       
+   ex_color_list = []
    try:
         single_product = Product.objects.get(id=product_id)
         product_gallery = ProductGallery.objects.filter(product_id=single_product.id)
+        product_vars = Variation.objects.filter(product=single_product, variation_category="color")
+        for variation in product_vars:
+            ex_color_list.append(variation.variation_value)
+
    except Exception as e:
         raise e
    
    context = {
         'single_product': single_product,
         'product_gallery': product_gallery,
+        'product_colors': ex_color_list,
     }
    return render(request, 'store/generate_description.html', context)
 
@@ -132,7 +144,7 @@ def generate_product_description(request):
         product_brand = request.GET.get('product_brand')
         product_category = request.GET.get('product_category')
         product_color = request.GET.get('product_color')
-        max_length = request.GET.get('max_length')
+        max_length = request.GET.get('wordrange')
 
         inference_modifier = {
             "max_tokens_to_sample": 4096,
@@ -152,7 +164,8 @@ def generate_product_description(request):
         multi_var_prompt = PromptTemplate(
             input_variables=["brand", "color", "category", "length", "details"], 
             template="""
-                Human: Create a catchy product description for a {brand} {color} {category}. The number of words should be less than {length}. Following are the product details:  
+                Human: Create a catchy product description for a {color} {category} from the brand {brand}. The number of words should be less than {length}. 
+                Following are the product details:  
                 <product_details>
                 {details}
                 </product_details>
@@ -175,4 +188,28 @@ def generate_product_description(request):
     request.session['product_details'] = product_details
     request.session['generated_description'] = generated_description
     request.session['generated_flag'] = True
+    request.session['prompt'] = prompt
+    request.session.modified = True
     return redirect(url)
+
+def save_product_description(request, product_id):
+    try:
+        single_product = Product.objects.get(id=product_id)
+        if 'save_description' in request.POST:
+            print("am here")
+            print("generated: " +request.POST.get('generated_description'))
+            single_product.description = request.POST.get('generated_description')
+            single_product.save()
+            success_message = "The product description for " + single_product.product_name + " has been updated successfully. "
+            messages.success(request, success_message)
+            return redirect('product_detail', single_product.category.slug, single_product.slug)
+        elif 'regenerate' in request.POST:
+            print("am here")
+            request.session['generated_flag'] = False
+            request.session.modified = True
+            return redirect('generate_description', single_product.id)
+        else:
+            pass
+    except:
+        pass
+
