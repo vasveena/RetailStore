@@ -9,5 +9,5 @@ urlpatterns = [
     path('submit_review/<int:product_id>/', views.submit_review, name='submit_review'),
     path('generate_description/<int:product_id>/', views.generate_description, name='generate_description'),
     path('save_product_description/<int:product_id>/', views.save_product_description, name='save_product_description'),
-    path('generate_product_description/', views.generate_product_description, name='generate_product_description'),
+    path('generate_product_description/<int:product_id>/', views.generate_product_description, name='generate_product_description'),
 ]

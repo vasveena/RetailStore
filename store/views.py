@@ -10,6 +10,7 @@ from django.db.models import Q
 from django.contrib import messages
 from orders.models import OrderProduct
 import os
+import json
 from utils import bedrock, print_ww
 from langchain.llms.bedrock import Bedrock
 from langchain import PromptTemplate
@@ -112,19 +113,10 @@ def submit_review(request, product_id):
                 return redirect(url)
 
 def generate_description(request, product_id):
-
-#    if 'generated_flag' in request.session:
-#        print("poppin")
-#        request.session['generated_flag'] = False
-#        request.session.modified = True
-       
-   ex_color_list = []
+          
    try:
         single_product = Product.objects.get(id=product_id)
         product_gallery = ProductGallery.objects.filter(product_id=single_product.id)
-        product_vars = Variation.objects.filter(product=single_product, variation_category="color")
-        for variation in product_vars:
-            ex_color_list.append(variation.variation_value)
 
    except Exception as e:
         raise e
@@ -132,27 +124,30 @@ def generate_description(request, product_id):
    context = {
         'single_product': single_product,
         'product_gallery': product_gallery,
-        'product_colors': ex_color_list,
     }
    return render(request, 'store/generate_description.html', context)
 
-def generate_product_description(request):
+def generate_product_description(request, product_id):
     warnings.filterwarnings('ignore')
     url = request.META.get('HTTP_REFERER')
+    single_product = Product.objects.get(id=product_id)
+    product_colors = []
+    product_vars = Variation.objects.filter(product=single_product, variation_category="color")
+    for variation in product_vars:
+        product_colors.append(variation.variation_value)
     try:
         product_details = request.GET.get('product_details')
         product_brand = request.GET.get('product_brand')
         product_category = request.GET.get('product_category')
-        product_color = request.GET.get('product_color')
         max_length = request.GET.get('wordrange')
 
-        inference_modifier = {
-            "max_tokens_to_sample": 4096,
-            "temperature": 0.5,
-            "top_k": 250,
-            "top_p": 1,
-            "stop_sequences": ["\n\nHuman"],
-        }
+        #Inference parameters for Claude Anthropic
+        inference_modifier = {}
+        inference_modifier['max_tokens_to_sample'] = int(request.GET.get('max_tokens_to_sample') or 200)
+        inference_modifier['temperature'] = float(request.GET.get('temperature') or 0.5)
+        inference_modifier['top_k'] = int(request.GET.get('top_k') or 250)
+        inference_modifier['top_p'] = float(request.GET.get('top_p') or 1)
+        inference_modifier['stop_sequences'] = ["\n\nHuman"]
 
         textgen_llm = Bedrock(
             model_id="anthropic.claude-instant-v1",
@@ -162,20 +157,26 @@ def generate_product_description(request):
         
         # Create a prompt template that has 4 input variables for product brand, color, category and description
         multi_var_prompt = PromptTemplate(
-            input_variables=["brand", "color", "category", "length", "details"], 
+            input_variables=["brand", "colors", "category", "length", "details"], 
             template="""
-                Human: Create a catchy product description for a {color} {category} from the brand {brand}. The number of words should be less than {length}. 
+                Human: Create a catchy product description for a {category} from the brand {brand}. The number of words should be less than {length}. 
                 Following are the product details:  
                 <product_details>
                 {details}
                 </product_details>
+                Briefly mention about all the available colors of the product. 
+                Example: Available colors are Blue, Purple and Orange. 
+                If the <available_colors> is empty, don't mention anything about the color of the product.
+                <available_colors>
+                {colors}
+                </available_colors>
 
                 Assistant:"""
                 )
 
         # Pass in form values to the prompt template
         prompt = multi_var_prompt.format(brand=product_brand, 
-                                         color=product_color,
+                                         colors=product_colors,
                                          category=product_category,
                                          length=max_length,
                                          details=product_details)
@@ -196,15 +197,12 @@ def save_product_description(request, product_id):
     try:
         single_product = Product.objects.get(id=product_id)
         if 'save_description' in request.POST:
-            print("am here")
-            print("generated: " +request.POST.get('generated_description'))
             single_product.description = request.POST.get('generated_description')
             single_product.save()
             success_message = "The product description for " + single_product.product_name + " has been updated successfully. "
             messages.success(request, success_message)
             return redirect('product_detail', single_product.category.slug, single_product.slug)
         elif 'regenerate' in request.POST:
-            print("am here")
             request.session['generated_flag'] = False
             request.session.modified = True
             return redirect('generate_description', single_product.id)

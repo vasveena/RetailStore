@@ -21,12 +21,11 @@
         </div> <!-- img-big-wrap.// -->
 
         </center>
-        <h4>Current description</h4><br>
-		<p>{{single_product.description}}</p>
-
-				<form action="{% url 'generate_product_description' %}">
-						<h4 class="title">Generate a new product description</h4>
+				<form action="{% url 'generate_product_description' single_product.id %}">
                         <div class="container">
+                            <h4>Current description</h4><br>
+		                <p>{{single_product.description}}</p>
+                            <h4 class="title">Generate a new product description</h4>
                             <div class="row">
                                 <div class="form-group name1 col-md-6">
                                     <br>
@@ -34,30 +33,53 @@
                                     <input type="text" class="form-control" name="product_brand" id="product_brand" placeholder="Polo, Nike etc." required/><br>
                                     Product Category
                                     <input type="text" class="form-control" name="product_category" id="product_category" value="{{single_product.category}}" required/><br>
-                                    Product Color
+                                    <!-- Product Color
                                     <select class="form-control" name="product_color" id="product_color" required>
                                     {{ product_colors }}
                                     {% for color in product_colors %}
                                         <option value={{color}} | lower>{{color}}</option>
                                     {% endfor %}
-                                    </select>
-                                    <!--input type="text" class="form-control" name="product_color" id="product_color" placeholder="Blue, Yellow etc." value="{{cart_item.variations.color}}" required--><br>
+                                    </select> <br> -->
                                     Maximum number of words
                                     <input type="range" class="form-control" name="wordrange" id="wordrange" min="25" max="250" value="50" oninput="this.form.wordrangenumber.value=this.value" />
                                     <input type="number" style="border:none" class="form-control" name="wordrangenumber" min="25" max="250" value="50" readonly oninput="this.form.wordrange.value=this.value" /><br>
 
+                                </div>
+                                <div class="form-group name1 col-md-1">&nbsp;</div>
+                                <div class="form-group name1 col-md-5">
+                                    <h6 class="title">Optional inference parameters</h6>
+                                    <br>
+                                    <div class="row">
+                                        <div class="form-group name1 col-md-6">
+                                            Max tokens to sample
+                                            <input type="range" class="form-control" name="max_tokens_to_sample" id="max_tokens_to_sample" min="0" max="8000" value="200" oninput="this.form.max_tokens_to_sample_number.value=this.value" />
+                                            <input type="number" style="border:none" class="form-control" name="max_tokens_to_sample_number" min="0" max="8000" value="200" readonly oninput="this.form.max_tokens_to_sample.value=this.value" /><br>
+                                        </div>
+                                        <div class="form-group name1 col-md-6">
+                                            Temperature
+                                            <input type="range" class="form-control" name="temperature" id="temperature" min="0" max="1" value="0.5" step="0.1" oninput="this.form.temperature_number.value=this.value" />
+                                            <input type="number" style="border:none" class="form-control" name="temperature_number" min="0" max="1" value="0.5" readonly oninput="this.form.temperature.value=this.value" /><br>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="form-group name1 col-md-6">
+                                            Top K 
+                                            <input type="range" class="form-control" name="top_k" id="top_k" min="0" max="500" value="250" oninput="this.form.top_k_number.value=this.value" />
+                                            <input type="number" style="border:none" class="form-control" name="top_k_number" min="0" max="500" value="250" readonly oninput="this.form.top_k.value=this.value" /><br>
+                                        </div>
+                                        <div class="form-group name1 col-md-6">
+                                            Top P
+                                            <input type="range" class="form-control" name="top_p" id="top_p" min="0" max="1" value="1" step="0.1" oninput="this.form.top_p_number.value=this.value" />
+                                            <input type="number" style="border:none" class="form-control" name="top_p_number" min="0" max="1" value="1" readonly oninput="this.form.top_p.value=this.value" /><br>
+                                        </div>
+                                    </div>   
+                                </div>
+                                <div class="form-group container">
                                     Product Details
-                                    <textarea name="product_details" rows="6" class="form-control" placeholder="Provide product details. Eg: comfort, fit, material etc." required>{{ request.session.product_details }}</textarea>
-                                    <br>
+                                    <textarea name="product_details" rows="6" class="form-control" placeholder="Provide product details. Eg: comfort, fit, material etc." required>{{ request.session.product_details }}</textarea><br>
+                                    <button type="submit" class="btn btn-primary"> <span class="text">Generate</span> <i class="fa fa-file-text-o"></i> </button><br>
                                 </div>
-                                <div class="form-group name1 col-md-6">
-                                    <br>
-                                    Product Brand 
-                                    <input type="text" class="form-control" name="product_brand" id="product_brand" placeholder="Polo, Nike etc." required/><br>
-                                    Product Category
-                                    <input type="text" class="form-control" name="product_category" id="product_category" value="{{single_product.category}}" required/><br>
-                                </div>
-							<button type="submit" class="btn btn-primary"> <span class="text">Generate</span> <i class="fa fa-file-text-o"></i> </button><br>
+                                <br>
                         </div>
 				</form>
 				
