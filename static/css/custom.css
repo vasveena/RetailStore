@@ -70,3 +70,13 @@
     display: inline-block;
     margin-right:20px; 
     }
+
+  .claudeparams{
+      display:none;
+      clear:both; 
+  }
+
+  .titanparams{
+    display:none;
+    clear:both; 
+}

@@ -13,4 +13,7 @@ urlpatterns = [
     path('create_response/<int:product_id>/<int:review_id>/', views.create_response, name='create_response'),
     path('create_review_response/<int:product_id>/<int:review_id>/', views.create_review_response, name='create_review_response'),
     path('save_review_response/<int:product_id>/<int:review_id>/', views.save_review_response, name='save_review_response'),
+    path('generate_summary/<int:product_id>/', views.generate_summary, name='generate_summary'),
+    path('generate_review_summary/<int:product_id>/', views.generate_review_summary, name='generate_review_summary'),
+    path('save_summary/<int:product_id>/', views.save_summary, name='save_summary'),
 ]

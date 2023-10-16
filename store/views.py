@@ -48,6 +48,7 @@ def product_detail(request, category_slug, product_slug):
     request.session['generated_flag'] = False
     request.session['product_details'] = None
     request.session['draft_flag'] = False
+    request.session['summary_flag'] = False
     request.session.modified = True
 
     try:
@@ -100,12 +101,10 @@ def submit_review(request, product_id):
             form = ReviewForm(request.POST, instance=reviews)
             form.save()
             messages.success(request, 'Thank you! Your review has been updated.')
-            print("in try" +url)
             return redirect(url)
         except ReviewRating.DoesNotExist:
             form = ReviewForm(request.POST)
             if form.is_valid():
-                print("form valid")
                 data = ReviewRating()
                 data.subject = form.cleaned_data['subject']
                 data.rating = form.cleaned_data['rating']
@@ -113,7 +112,6 @@ def submit_review(request, product_id):
                 data.ip = request.META.get('REMOTE_ADDR')
                 data.product_id = product_id
                 data.user_id = request.user.id
-                print("before save")
                 data.save()
                 messages.success(request, 'Thank you! Your review has been submitted.')
                 return redirect(url)
@@ -219,7 +217,7 @@ def save_product_description(request, product_id):
     except:
         pass
 
-def create_response(request, product_id, review_id, draft_flag=False):
+def create_response(request, product_id, review_id):
     try:
         single_product = Product.objects.get(id=product_id)
         review = ReviewRating.objects.get(product=single_product, id=review_id)
@@ -230,7 +228,6 @@ def create_response(request, product_id, review_id, draft_flag=False):
     context = {
             'single_product': single_product,
             'review': review,
-            'draft_flag': draft_flag,
         }
     return render(request, 'store/create_response.html', context)
 
@@ -318,6 +315,105 @@ def save_review_response(request, product_id, review_id):
         elif 'regenerate' in request.POST:
             request.session.modified = True
             return redirect('create_response', single_product.id, review.id)
+        else:
+            pass
+    except:
+        pass
+
+def generate_summary(request, product_id): 
+    try:
+        single_product = Product.objects.get(id=product_id)
+        product_reviews = ReviewRating.objects.filter(product=single_product, status=True)
+
+    except Exception as e:
+            raise e
+    
+    context = {
+            'single_product': single_product,
+            'reviews': product_reviews,
+        }
+    return render(request, 'store/generate_summary.html', context)
+
+def generate_review_summary(request, product_id):
+    url = request.META.get('HTTP_REFERER')
+    single_product = Product.objects.get(id=product_id)
+    product_reviews = ReviewRating.objects.filter(product=single_product)
+
+    review_digest = ''
+
+    for review in product_reviews:
+        review_digest += "<review>" + '\n'
+        review_digest += review.review + '\n'
+        review_digest += "</review>" + '\n\n'
+
+    try:
+        if 'Claude' in request.GET.get('llm'):
+            textgen_llm = Bedrock(
+                model_id="anthropic.claude-instant-v1",
+                client=boto3_bedrock,
+            )
+            #Inference parameters for Claude Anthropic
+            inference_modifier = {}
+            inference_modifier['max_tokens_to_sample'] = int(request.GET.get('claude_max_tokens_to_sample') or 200)
+            inference_modifier['temperature'] = float(request.GET.get('claude_temperature') or 0.5)
+            inference_modifier['top_k'] = int(request.GET.get('claude_top_k') or 250)
+            inference_modifier['top_p'] = float(request.GET.get('claude_top_p') or 1)
+            inference_modifier['stop_sequences'] = ["\n\nHuman"]
+        
+        elif 'Titan' in request.GET.get('llm'):
+            textgen_llm = Bedrock(
+                model_id="amazon.titan-tg1-large",
+                client=boto3_bedrock,)
+
+            #Inference parameters for Titan
+            inference_modifier = {}
+            inference_modifier['maxTokenCount'] = int(request.GET.get('titan_max_tokens_to_sample') or 200)
+            inference_modifier['temperature'] = float(request.GET.get('titan_temperature') or 0.5)
+            inference_modifier['topP'] = int(request.GET.get('titan_top_p') or 250)
+            
+        else:
+            pass
+
+        #create prompt
+        multi_var_prompt = PromptTemplate(
+            input_variables=["product_name","reviews"],
+            template="""
+            Human: Provide a review summary including pros and cons based on the customer reviews for the product {product_name}. This summary will be updated in the product webpage. Customer reviews are enclosed in <customer_reviews> tag. 
+            <customer_reviews>
+            {reviews}
+            <customer_reviews>
+            """)
+        
+        # Pass in form values to the prompt template
+        prompt = multi_var_prompt.format(product_name=single_product.product_name,
+                                         reviews=review_digest)
+
+        response = textgen_llm(prompt)
+
+        request.session['generated_summary'] = response
+        request.session['summary_prompt'] = prompt
+        request.session['summary_flag'] = True
+        request.session.modified = True
+
+    except: 
+        pass
+
+    return redirect(url)
+
+def save_summary(request, product_id):
+    try:
+        single_product = Product.objects.get(id=product_id)
+        request.session['summary_flag'] = False
+
+        if 'save_summary' in request.POST:
+            single_product.review_summary = request.session['generated_summary']
+            single_product.save()
+            success_message = "The summary for the review of " + single_product.product_name + " has been updated successfully. "
+            messages.success(request, success_message)
+            return redirect('product_detail', single_product.category.slug, single_product.slug)
+        elif 'regenerate' in request.POST:
+            request.session.modified = True
+            return redirect('generate_summary', single_product.id)
         else:
             pass
     except:
