@@ -34,22 +34,28 @@ def register(request):
             username = email.split('@')[0]
             user = Account.objects.create_user(first_name=first_name, last_name=last_name, email=email, username=username, password=password)
             user.phone_number = phone_number
+            user.is_active = True
             user.save()
+            user_profile = UserProfile()
+            user_profile.user = user
+            user_profile.save()
+            messages.success(request, 'You are now registered to re:Invent Retails! Please login')
+            return redirect('login')
             
             #USER ACTIVATION
-            current_site = get_current_site(request)
-            mail_subject = 'Please activate your Reinvent Retails account'
-            message = render_to_string('accounts/account_verification_email.html',{
-                'user': user,
-                'domain': current_site,
-                'uid': urlsafe_base64_encode(force_bytes(user.pk)),
-                'token': default_token_generator.make_token(user),
-            })
-            to_email = email
-            send_email = EmailMessage(mail_subject, message, to=[to_email])
-            send_email.send()
+            # current_site = get_current_site(request)
+            # mail_subject = 'Please activate your Reinvent Retails account'
+            # message = render_to_string('accounts/account_verification_email.html',{
+            #     'user': user,
+            #     'domain': current_site,
+            #     'uid': urlsafe_base64_encode(force_bytes(user.pk)),
+            #     'token': default_token_generator.make_token(user),
+            # })
+            # to_email = email
+            # send_email = EmailMessage(mail_subject, message, to=[to_email])
+            # send_email.send()
             #messages.success(request, 'Thanks for registering! Please check your email and verify your account.')
-            return redirect('/accounts/login/?command=verification&email='+email)
+            #return redirect('/accounts/login/?command=verification&email='+email)
     else:
         form = RegistrationForm()
     context = {

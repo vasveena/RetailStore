@@ -133,11 +133,7 @@
 			<textarea name="review" rows="6" class="form-control"></textarea>
 			<br>
 			{% if user.is_authenticated %}
-				{% if orderproduct %}
 					<input type="submit" value="Submit Review" class="btn btn-primary">
-				{% else %}
-					<p>You must purchase this product to post a review.</p>
-				{% endif %}
 			{% else %}
 				<p>You must be logged in to post a review. <span><a href="{% url 'login' %}">Login now</a></span></p>
 			{% endif %}
@@ -185,6 +181,17 @@
 						<p>
 							{{review.review}}
 						</p>
+					</div>
+					<br>
+					<div>
+						<a href="{% url 'create_response' single_product.id review.id %}" class="btn  btn-outline-primary"> <span class="text">Create response&nbsp</span> <i class="fa fa-commenting"></i> </a>
+						{% if review.generated_response|length|get_digit:"-1" > 0 %}
+							<p>
+							<br>
+							<h7>Drafted response: </h7>
+							<textarea name="draft_prompt" rows="8" class="form-control" readonly>{{review.generated_response}}</textarea>
+							</p>
+						{% endif %}
 					</div>
 				</article>
 {% endfor %}

@@ -10,4 +10,7 @@ urlpatterns = [
     path('generate_description/<int:product_id>/', views.generate_description, name='generate_description'),
     path('save_product_description/<int:product_id>/', views.save_product_description, name='save_product_description'),
     path('generate_product_description/<int:product_id>/', views.generate_product_description, name='generate_product_description'),
+    path('create_response/<int:product_id>/<int:review_id>/', views.create_response, name='create_response'),
+    path('create_review_response/<int:product_id>/<int:review_id>/', views.create_review_response, name='create_review_response'),
+    path('save_review_response/<int:product_id>/<int:review_id>/', views.save_review_response, name='save_review_response'),
 ]

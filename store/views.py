@@ -47,6 +47,7 @@ def store(request, category_slug=None):
 def product_detail(request, category_slug, product_slug):
     request.session['generated_flag'] = False
     request.session['product_details'] = None
+    request.session['draft_flag'] = False
     request.session.modified = True
 
     try:
@@ -99,11 +100,12 @@ def submit_review(request, product_id):
             form = ReviewForm(request.POST, instance=reviews)
             form.save()
             messages.success(request, 'Thank you! Your review has been updated.')
-            #print("in try" +url)
+            print("in try" +url)
             return redirect(url)
         except ReviewRating.DoesNotExist:
             form = ReviewForm(request.POST)
             if form.is_valid():
+                print("form valid")
                 data = ReviewRating()
                 data.subject = form.cleaned_data['subject']
                 data.rating = form.cleaned_data['rating']
@@ -111,9 +113,9 @@ def submit_review(request, product_id):
                 data.ip = request.META.get('REMOTE_ADDR')
                 data.product_id = product_id
                 data.user_id = request.user.id
+                print("before save")
                 data.save()
                 messages.success(request, 'Thank you! Your review has been submitted.')
-                #print("in except" +url)
                 return redirect(url)
 
 def generate_description(request, product_id, flag=False):
@@ -217,3 +219,108 @@ def save_product_description(request, product_id):
     except:
         pass
 
+def create_response(request, product_id, review_id, draft_flag=False):
+    try:
+        single_product = Product.objects.get(id=product_id)
+        review = ReviewRating.objects.get(product=single_product, id=review_id)
+
+    except Exception as e:
+            raise e
+    
+    context = {
+            'single_product': single_product,
+            'review': review,
+            'draft_flag': draft_flag,
+        }
+    return render(request, 'store/create_response.html', context)
+
+def create_review_response(request, product_id, review_id):
+    url = request.META.get('HTTP_REFERER')
+    product = Product.objects.get(id=product_id)
+    review = ReviewRating.objects.get(product=product, id=review_id)
+    try:
+        product_name = product.product_name
+        review_text = review.review
+        max_length = request.GET.get('wordrange')
+
+        #Inference parameters for Claude Anthropic
+        inference_modifier = {}
+        inference_modifier['max_tokens_to_sample'] = int(request.GET.get('max_tokens_to_sample') or 200)
+        inference_modifier['temperature'] = float(request.GET.get('temperature') or 0.5)
+        inference_modifier['top_k'] = int(request.GET.get('top_k') or 250)
+        inference_modifier['top_p'] = float(request.GET.get('top_p') or 1)
+        inference_modifier['stop_sequences'] = ["\n\nHuman"]
+
+        textgen_llm = Bedrock(
+            model_id="anthropic.claude-instant-v1",
+            client=boto3_bedrock,
+            model_kwargs=inference_modifier,
+        )
+        
+        # Create a prompt template that has 4 input variables for product brand, color, category and description
+        multi_var_prompt = PromptTemplate(
+            input_variables=["product_name","customer_name","email","phone","length","review"], 
+            template="""
+                Human: I'm the manager of re:Invent retails. Draft a response for the review of the product {product_name} from our customer {customer_name}. The number of words should be less than {length}. My contact information: {email} {phone}. 
+                <customer_review>
+                {review}
+                <customer_review>
+
+                Example response pattern: 
+                Dear <customer_name>,
+                <content_body>
+                
+                <if negative review> 
+                    Don't hesitate to contact me at {email} or {phone}. 
+                <end if> 
+
+                Sincerely,
+                <signature>
+                {email}
+                {phone}
+                Assistant:"""
+                )
+
+        # Pass in form values to the prompt template
+        prompt = multi_var_prompt.format(product_name=product_name,
+                                         customer_name=review.user.full_name(),
+                                         email=request.user.email,
+                                         phone=request.user.phone_number,
+                                         length=max_length,
+                                         review=review_text)
+        response = textgen_llm(prompt)
+
+        generated_response = response[response.index('\n')+1:]
+
+    except Exception as e:
+        raise e
+
+    request.session['generated_response'] = generated_response
+    request.session['draft_prompt'] = prompt
+    request.session['draft_flag'] = True
+    request.session.modified = True
+
+    return redirect(url)
+
+def save_review_response(request, product_id, review_id):
+    try:
+        request.session['draft_flag'] = False
+        single_product = Product.objects.get(id=product_id)
+        review = ReviewRating.objects.get(product=single_product, id=review_id)
+
+        if 'save_response' in request.POST:
+            review.generated_response = request.POST.get('generated_response')
+            review.prompt = request.session.get('draft_prompt')
+            review.save()
+            success_message = "The response for the review of " + single_product.product_name + " has been updated successfully. "
+            messages.success(request, success_message)
+            return redirect('product_detail', single_product.category.slug, single_product.slug)
+        elif 'regenerate' in request.POST:
+            request.session.modified = True
+            return redirect('create_response', single_product.id, review.id)
+        else:
+            pass
+    except:
+        pass
+
+            
