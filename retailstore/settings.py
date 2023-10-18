@@ -104,17 +104,6 @@ else:
         }
     }
 
-# DATABASES = {
-#         'default': {
-#             'ENGINE': 'django.db.backends.mysql',
-#             'NAME': 'ebdb',
-#             'USER': 'retailsdbuser',
-#             'PASSWORD': 'Test123$',
-#             'HOST': 'awseb-e-bxthhmvv8m-stack-awsebrdsdatabase-bo7nnfrr7lfl.cfwjo1z2fxkb.us-east-1.rds.amazonaws.com',
-#             'PORT': '3306',
-#         }
-#     }
-
 # Password validation
 # https://docs.djangoproject.com/en/3.1/ref/settings/#auth-password-validators
 
