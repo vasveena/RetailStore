@@ -12,6 +12,7 @@ from orders.models import OrderProduct
 import os
 from utils import bedrock, print_ww
 from langchain.llms.bedrock import Bedrock
+from langchain.embeddings import BedrockEmbeddings
 from langchain import PromptTemplate
 import warnings
 from PIL import Image
@@ -23,6 +24,12 @@ from decouple import config
 import boto3
 import string
 import mysql.connector
+import numpy as np
+#from skimage import io
+import matplotlib.pyplot as plt
+import requests
+import psycopg2
+from pgvector.psycopg2 import register_vector
 
 # Initialize Bedrock client 
 boto3_bedrock = bedrock.get_bedrock_client(assumed_role=os.environ.get("BEDROCK_ASSUME_ROLE", None), region=os.environ.get("AWS_DEFAULT_REGION", None))
@@ -709,12 +716,67 @@ def vector_search(request):
     if 'keyword' in request.GET:
         keyword = request.GET['keyword']
         if keyword:
-            pass
-            # base64.b64encode(img_data)
-            # mime = "image/jpeg"
-            # uri = "data:%s;base64,%s" % (mime, encoded)
-    context = {
-        #'images': images,
-        #'product_count': product_count,
-    }
-    return render(request, 'store/store.html', context)
+            modelId = "amazon.titan-embed-g1-text-02"
+            bedrock_embeddings = BedrockEmbeddings(model_id=modelId, client=boto3_bedrock)
+            search_embedding = list(bedrock_embeddings.embed_query(keyword))
+            response = secrets.get_secret_value(
+                SecretId='postgresdb-secret'
+            )
+            database_secrets = json.loads(response['SecretString'])
+
+            dbhost = database_secrets['host']
+            dbport = database_secrets['port']
+            dbuser = database_secrets['username']
+            dbpass = database_secrets['password']
+            dbname = database_secrets['vectorDbIdentifier']
+
+            dbconn = psycopg2.connect(host=dbhost, user=dbuser, password=dbpass, port=dbport, database=dbname, connect_timeout=10)
+            dbconn.set_session(autocommit=True)
+            cur = dbconn.cursor()
+
+            cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+            register_vector(dbconn)
+            cur.execute("""CREATE INDEX ON vector_products 
+               USING ivfflat (descriptions_embeddings vector_l2_ops) WITH (lists = 100);""")
+            cur.execute("VACUUM ANALYZE vector_products;")
+
+            #print(search_embedding)
+
+            cur.execute("""SELECT id, url, description, descriptions_embeddings 
+                        FROM vector_products 
+                        ORDER BY descriptions_embeddings <-> %s limit 5;""", 
+                        (np.array(search_embedding),))
+
+            r = cur.fetchall()
+            product_count = len(r)
+            print("product_count: "+ str(product_count))
+
+            combined = []
+
+            for x in r:
+                c = {}
+                url = x[1].split('?')[0]
+                product_item_id = x[0]
+                desc = x[2]
+                response = requests.get(url)
+                img = Image.open(io.BytesIO(response.content))
+                img = img.resize((256, 256))
+                buf = io.BytesIO()
+                img.save(buf, 'jpeg')
+                image_bytes = buf.getvalue()
+                encoded = base64.b64encode(image_bytes).decode('ascii')
+                mime = "image/jpeg"
+                uri = "data:%s;base64,%s" % (mime, encoded)
+                c['uri'] = uri
+                c['desc'] = desc
+                c['product_item_id'] = product_item_id   
+                combined.append(c)
+
+            cur.close()
+            dbconn.close()
+            context = {
+                'keyword': keyword,
+                'combined': combined,
+                'product_count': product_count,
+            }
+    return render(request, 'store/vector.html', context)
