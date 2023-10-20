@@ -26,13 +26,20 @@ import mysql.connector
 
 # Initialize Bedrock client 
 boto3_bedrock = bedrock.get_bedrock_client(assumed_role=os.environ.get("BEDROCK_ASSUME_ROLE", None), region=os.environ.get("AWS_DEFAULT_REGION", None))
+
+# Initialize S3 client
 s3 = boto3.client('s3')
+
+# Initialize secrets manager
+secrets = boto3.client('secretsmanager')
+
 # Connect to MySQL database
+dbname="ebdb"
 mysqldb = mysql.connector.connect(
     host=os.environ['RDS_HOSTNAME'],
     user=os.environ['RDS_USERNAME'],
     password=os.environ['RDS_PASSWORD'],
-    database=os.environ['RDS_DB_NAME'],
+    database=dbname,
     port=os.environ['RDS_PORT']
     )
 
@@ -697,3 +704,17 @@ def ask_question(request):
         }
 
     return render(request, 'store/question.html', context)
+
+def vector_search(request):
+    if 'keyword' in request.GET:
+        keyword = request.GET['keyword']
+        if keyword:
+            pass
+            # base64.b64encode(img_data)
+            # mime = "image/jpeg"
+            # uri = "data:%s;base64,%s" % (mime, encoded)
+    context = {
+        #'images': images,
+        #'product_count': product_count,
+    }
+    return render(request, 'store/store.html', context)

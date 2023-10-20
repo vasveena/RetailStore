@@ -19,4 +19,5 @@ urlpatterns = [
     path('ask_question/', views.ask_question, name='ask_question'),
     path('design_studio/<int:product_id>/', views.design_studio, name='design_studio'),
     path('create_design_ideas/<int:product_id>', views.create_design_ideas, name='create_design_ideas'),
+    path('vector_search/', views.vector_search, name='vector_search'),
 ]
