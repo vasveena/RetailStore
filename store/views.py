@@ -599,9 +599,8 @@ def ask_question(request):
             Database is implemented in MySQL.
             Enclose the query in <query></query>. 
             Do not use newline character or "\n". 
-            Use "like" and to_upper for string comparison. For example, if the query contains "jackets", use like upper('%jacket%'). If the query contains "pants", use like upper('%pant%')
-            If the question is not related to e-commerce or clothing, then do not generate any query in <query></query> and do not answer the question. Instead, mention that the answer is not found in context. 
-            Do not mention about SQL or schema or database. Do not include details about tables or database. 
+            Use "like" and to_upper for string comparison. For example, if the query contains "jackets", use "like upper('%jacket%')". If the query contains "pants", use "like upper('%pant%')"
+            If the question is generic, like "where is mount everest", then do not generate any query in <query></query> and do not answer the question. Instead, mention that the answer is not found in context. 
 
             <schema>
                 {schema}
@@ -640,13 +639,12 @@ def ask_question(request):
                 cursor = mysqldb.cursor()
                 cursor.execute(query)
                 
-                rs = []
+                resultset = ''
                 query_result = cursor.fetchall()
 
-                for x in query_result:
-                    rs.append(x)
-
-                resultset = ''.join(str(s)+"\n" for s in rs)
+                if len(query_result) > 0:
+                    for x in query_result:
+                        resultset = resultset + ''.join(str(x)) + "\n"
 
                 print("resultset: " +resultset)
 
@@ -663,6 +661,7 @@ def ask_question(request):
 
                 Summarize the above result and answer the question asked by the customer. 
 
+                Mask the PIIs phone, email andd address if found the answer with "<PII masked>"
                 If the question is not related to the schema {schema}, then say "Sorry, the answer is not found in the context".
                 If <resultset></resultset> is empty or none, then the query did not return any results. Answer that the item is not available based on the question.
                 If <resultset></resultset> is not empty, then answer the question based on the items found. 
