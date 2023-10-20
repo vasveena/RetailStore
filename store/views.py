@@ -505,7 +505,7 @@ def create_design_ideas(request, product_id):
             print("image path: " +request.session['image_file_path'])
             product_gallery_del = ProductGallery.objects.filter(product=single_product, image=request.session['image_file_path'])
             if product_gallery_del:
-                print("am here")
+
                 s3.delete_object(Bucket=bucket_name, Key=request.session['image_file_path'])
                 product_gallery_del.delete()
                 del request.session['image_flag']
@@ -600,21 +600,23 @@ def create_design_ideas(request, product_id):
 def ask_question(request):
     context={}
     is_query_generated = False
-    is_answered = False
+    describe_query_result = ''
 
     if 'question' in request.GET:
 
         question = request.GET.get('question')
+        print("question: " +question)
         s3 = boto3.client('s3')
-        resp = s3.get_object(Bucket=config('AWS_STORAGE_BUCKET_NAME'), Key="data/schema.sql")
+        resp = s3.get_object(Bucket=config('AWS_STORAGE_BUCKET_NAME'), Key="data/postgres-schema.sql")
         schema = resp['Body'].read().decode("utf-8")
         prompt_template = """
-            Human: Create an SQL query for a retail website to answer the question.
-            Database is implemented in MySQL.
-            Enclose the query in <query></query>. 
-            Do not use newline character or "\n". 
-            Use "like" and to_upper for string comparison. For example, if the query contains "jackets", use "like upper('%jacket%')". If the query contains "pants", use "like upper('%pant%')"
-            If the question is generic, like "where is mount everest", then do not generate any query in <query></query> and do not answer the question. Instead, mention that the answer is not found in context. 
+            Human: Create an SQL query for a retail website to answer the question keeping the following rules in mind: 
+            1. Database is implemented in Postgres.
+            2. Enclose the query in <query></query>. 
+            3. Do not use newline character or "\n". 
+            4. Use "like" and upper() for string comparison on both left hand side and right hand side of the expression. For example, if the query contains "jackets", use "where upper(product_name) like upper('%jacket%')". 
+            5. If the question is generic, like "where is mount everest" or "who went to the moon first", then do not generate any query in <query></query> and do not answer the question in any form. Instead, mention that the answer is not found in context.
+            6. If the question is not related to the schema, then do not generate any query in <query></query> and do not answer the question in any form. Instead, mention that the answer is not found in context.  
 
             <schema>
                 {schema}
@@ -634,7 +636,6 @@ def ask_question(request):
 
         try: 
             llm_response = llm(prompt)
-            print(llm_response)
 
             if "<query>".upper() not in llm_response.upper():
                 print("no query generated")
@@ -649,12 +650,28 @@ def ask_question(request):
                 query = extract_strings_recursive(llm_response, "query")[0]
                 print("generated query: " +query)
 
+                response = secrets.get_secret_value(
+                SecretId='postgresdb-secret')
+
+                database_secrets = json.loads(response['SecretString'])
+
+                # Connect to PostgreSQL database
+                dbhost = database_secrets['host']
+                dbport = database_secrets['port']
+                dbuser = database_secrets['username']
+                dbpass = database_secrets['password']
+                dbname = database_secrets['name']
+
+                dbconn = psycopg2.connect(host=dbhost, user=dbuser, password=dbpass, port=dbport, database=dbname, connect_timeout=10)
+                dbconn.set_session(autocommit=True)
+                cursor = dbconn.cursor()
+
                 # Execute the extracted query
-                cursor = mysqldb.cursor()
                 cursor.execute(query)
                 
                 resultset = ''
                 query_result = cursor.fetchall()
+                dbconn.close()
 
                 if len(query_result) > 0:
                     for x in query_result:
@@ -662,7 +679,6 @@ def ask_question(request):
 
                 print("resultset: " +resultset)
 
-                is_answered = True
                 prompt_template = """
 
                 Human: This is a Q&A application. We need to answer questions asked by the customer at an e-commerce store. 
@@ -673,27 +689,25 @@ def ask_question(request):
                 {resultset}
                 </resultset>
 
-                Summarize the above result and answer the question asked by the customer. 
-
-                Mask the PIIs phone, email andd address if found the answer with "<PII masked>"
-                If the question is not related to the schema {schema}, then say "Sorry, the answer is not found in the context".
-                If <resultset></resultset> is empty or none, then the query did not return any results. Answer that the item is not available based on the question.
-                If <resultset></resultset> is not empty, then answer the question based on the items found. 
-
-                Don't say "based on the output" or "based on the query" or "based on the question" or something similar.  
-                Don't give an impression to the user that a query was run. Instead, answer naturally. 
+                Summarize the above result and answer the question asked by the customer keeping the following rules in mind: 
+                1. Don't make up answers if <resultset></resultset> is empty or none. Instead, answer that the item is not available based on the question.
+                2. Mask the PIIs phone, email and address if found the answer with "<PII masked>"
+                3. Don't say "based on the output" or "based on the query" or "based on the question" or something similar.  
+                4. Keep the answer concise. 
+                5. Don't give an impression to the customer that a query was run. Instead, answer naturally. 
 
                 Assistant:
 
                 """
 
                 multi_var_prompt = PromptTemplate(
-                    template=prompt_template, input_variables=["question","resultset","schema"]
+                    template=prompt_template, input_variables=["question","resultset"]
                 )
 
-                prompt = multi_var_prompt.format(question=question, resultset=resultset, schema=schema)
+                prompt = multi_var_prompt.format(question=question, resultset=resultset)
 
                 describe_query_result = llm(prompt)
+                print("describe_query_result " + describe_query_result)
 
                 if len(describe_query_result) == 0:
                     describe_query_result = "Sorry, I could not answer that question."
@@ -705,8 +719,6 @@ def ask_question(request):
             "question": question,
             "query": query,
             "is_query_generated": is_query_generated,
-            "is_answered": is_answered,
-            "resultset": resultset,
             "describe_query_result": describe_query_result,
         }
 
