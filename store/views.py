@@ -59,8 +59,8 @@ def product_detail(request, category_slug, product_slug):
     request.session['draft_flag'] = False
     request.session['summary_flag'] = False
     request.session['image_flag'] = False
-    del request.session['change_prompt']
-    del request.session['negative_prompt']
+    request.session['change_prompt'] = None
+    request.session['negative_prompt'] = None
     request.session.modified = True
 
     try:
