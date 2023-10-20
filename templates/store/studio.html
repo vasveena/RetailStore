@@ -39,9 +39,9 @@
                                 <div class="form-group row-md-8">
                                     <p>Enter prompt for creating new design ideas</p>
                                     {% if request.session.change_prompt %}
-                                    <textarea name="change_prompt" rows="6" class="form-control" placeholder="Enter your image prompt here." required>{{ request.session.change_prompt }}</textarea>
+                                    <textarea name="change_prompt" rows="6" class="form-control" placeholder="Enter your image prompt here.">{{ request.session.change_prompt }}</textarea>
                                     {% else %}
-                                        <textarea name="change_prompt" rows="6" class="form-control" placeholder="Enter your image prompt here." required></textarea>
+                                        <textarea name="change_prompt" rows="6" class="form-control" placeholder="Enter your image prompt here."></textarea>
                                     {% endif %}
                                 </div>
                             </div>
@@ -53,9 +53,9 @@
                                         <div class="form-group name1 col-md-12">
                                             <p>Enter negative prompts delimited by new line</p>
                                             {% if request.session.negative_prompt %}
-                                            <textarea name="negative_prompt" rows="6" class="form-control" placeholder="Enter your negative prompt here." required>{{ request.session.negative_prompt }}</textarea>
+                                            <textarea name="negative_prompt" rows="6" class="form-control" placeholder="Enter your negative prompt here.">{{ request.session.negative_prompt }}</textarea>
                                             {% else %}
-                                                <textarea name="negative_prompt" rows="6" class="form-control" placeholder="Enter your negative prompt here." required></textarea>
+                                                <textarea name="negative_prompt" rows="6" class="form-control" placeholder="Enter your negative prompt here."></textarea>
                                             {% endif %}
                                         </div>
                                     </div>
