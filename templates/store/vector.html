@@ -20,9 +20,9 @@
                 {% for i in combined %}
                 <h4>Product ID: {{ i.product_item_id }}</h4>
                 <br>
-                <p>Description: {{ i.desc }}</p>
+                <p>{{ i.desc }}</p>
                 <br>
-                <a href="{{ i.uri }}" target="mainImage"><img src="{{ i.uri }}" alt="Vector Image"></a>
+                <center><img src="{{ i.uri }}" alt="Vector Image"></center>
                 <br><br> 
                 {% endfor %}
                 

@@ -594,16 +594,17 @@ def ask_question(request):
         question = request.GET.get('question')
         print("question: " +question)
         s3 = boto3.client('s3')
-        resp = s3.get_object(Bucket=config('AWS_STORAGE_BUCKET_NAME'), Key="data/schema-postgres.sql")
+        resp = s3.get_object(Bucket=config('AWS_STORAGE_BUCKET_NAME'), Key="data/schema-mysql.sql")
         schema = resp['Body'].read().decode("utf-8")
         prompt_template = """
-            Human: Create an SQL query for a retail website to answer the question keeping the following rules in mind: 
-            1. Database is implemented in Postgres.
+            Human: Create an Postgres SQL query for a retail website to answer the question keeping the following rules in mind: 
+            1. Database is implemented in Postgres SQL.
             2. Enclose the query in <query></query>. 
             3. Do not use newline character or "\n". 
             4. Use "like" and upper() for string comparison on both left hand side and right hand side of the expression. For example, if the query contains "jackets", use "where upper(product_name) like upper('%jacket%')". 
-            5. If the question is generic, like "where is mount everest" or "who went to the moon first", then do not generate any query in <query></query> and do not answer the question in any form. Instead, mention that the answer is not found in context.
-            6. If the question is not related to the schema, then do not generate any query in <query></query> and do not answer the question in any form. Instead, mention that the answer is not found in context.  
+            5. For date queries, postgres looks like this "NOW() - INTERVAL '30 MINUTES'" to indicate the last 30 mins. 
+            6. If the question is generic, like "where is mount everest" or "who went to the moon first", then do not generate any query in <query></query> and do not answer the question in any form. Instead, mention that the answer is not found in context.
+            7. If the question is not related to the schema, then do not generate any query in <query></query> and do not answer the question in any form. Instead, mention that the answer is not found in context.  
 
             <schema>
                 {schema}
@@ -735,15 +736,15 @@ def vector_search(request):
 
             cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
             register_vector(dbconn)
-            cur.execute("""CREATE INDEX ON vector_products 
+            cur.execute("""CREATE INDEX ON vector_products2 
                USING ivfflat (descriptions_embeddings vector_l2_ops) WITH (lists = 100);""")
-            cur.execute("VACUUM ANALYZE vector_products;")
+            cur.execute("VACUUM ANALYZE vector_products2;")
 
             #print(search_embedding)
 
             cur.execute("""SELECT id, url, description, descriptions_embeddings 
-                        FROM vector_products 
-                        ORDER BY descriptions_embeddings <-> %s limit 5;""", 
+                        FROM vector_products2 
+                        ORDER BY descriptions_embeddings <-> %s limit 10;""", 
                         (np.array(search_embedding),))
 
             r = cur.fetchall()
