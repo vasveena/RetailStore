@@ -23,7 +23,6 @@ import random
 from decouple import config
 import boto3
 import string
-import mysql.connector
 import numpy as np
 #from skimage import io
 import matplotlib.pyplot as plt
@@ -39,16 +38,6 @@ s3 = boto3.client('s3')
 
 # Initialize secrets manager
 secrets = boto3.client('secretsmanager')
-
-# Connect to MySQL database
-dbname="ebdb"
-mysqldb = mysql.connector.connect(
-    host=os.environ['RDS_HOSTNAME'],
-    user=os.environ['RDS_USERNAME'],
-    password=os.environ['RDS_PASSWORD'],
-    database=dbname,
-    port=os.environ['RDS_PORT']
-    )
 
 # Create your views here.
 
