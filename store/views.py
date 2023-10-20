@@ -19,13 +19,22 @@ import base64
 import io
 import json
 import random
-from django.core.files.base import ContentFile
 from decouple import config
 import boto3
 import string
+import mysql.connector
 
 # Initialize Bedrock client 
 boto3_bedrock = bedrock.get_bedrock_client(assumed_role=os.environ.get("BEDROCK_ASSUME_ROLE", None), region=os.environ.get("AWS_DEFAULT_REGION", None))
+s3 = boto3.client('s3')
+# Connect to MySQL database
+mysqldb = mysql.connector.connect(
+    host=os.environ['RDS_HOSTNAME'],
+    user=os.environ['RDS_USERNAME'],
+    password=os.environ['RDS_PASSWORD'],
+    database=os.environ['RDS_DB_NAME'],
+    port=os.environ['RDS_PORT']
+    )
 
 # Create your views here.
 
@@ -127,6 +136,25 @@ def submit_review(request, product_id):
                 data.save()
                 messages.success(request, 'Thank you! Your review has been submitted.')
                 return redirect(url)
+
+
+def extract_strings_recursive(test_str, tag):
+    # finding the index of the first occurrence of the opening tag
+    start_idx = test_str.find("<" + tag + ">")
+ 
+    # base case
+    if start_idx == -1:
+        return []
+ 
+    # extracting the string between the opening and closing tags
+    end_idx = test_str.find("</" + tag + ">", start_idx)
+    res = [test_str[start_idx+len(tag)+2:end_idx]]
+ 
+    # recursive call to extract strings after the current tag
+    res += extract_strings_recursive(test_str[end_idx+len(tag)+3:], tag)
+ 
+    return res
+
 
 def generate_description(request, product_id):
    try:
@@ -374,7 +402,7 @@ def generate_review_summary(request, product_id):
         elif 'Titan' in request.GET.get('llm'):
             textgen_llm = Bedrock(
                 model_id="amazon.titan-tg1-large",
-                client=boto3_bedrock,)
+                client=boto3_bedrock)
 
             #Inference parameters for Titan
             inference_modifier = {}
@@ -430,9 +458,6 @@ def save_summary(request, product_id):
     except:
         pass
 
-def ask_question(request):
-    return render(request, 'store/question.html')
-
 def design_studio(request, product_id):
     single_product = Product.objects.get(id=product_id)
     context = {
@@ -456,11 +481,9 @@ def image_to_base64(img) -> str:
         raise ValueError(f"Expected str (filename) or PIL Image. Got {type(img)}")
 
 def create_design_ideas(request, product_id):
-
     url = request.META.get('HTTP_REFERER')
     single_product = Product.objects.get(id=product_id)
     bucket_name = config('AWS_STORAGE_BUCKET_NAME')
-    s3 = boto3.client('s3')
     
     try:
         if 'delete_previous' in request.GET:
@@ -558,3 +581,120 @@ def create_design_ideas(request, product_id):
         print(e)
         
     return redirect(url)
+
+
+def ask_question(request):
+    context={}
+    is_query_generated = False
+    is_answered = False
+
+    if 'question' in request.GET:
+
+        question = request.GET.get('question')
+        s3 = boto3.client('s3')
+        resp = s3.get_object(Bucket=config('AWS_STORAGE_BUCKET_NAME'), Key="data/schema.sql")
+        schema = resp['Body'].read().decode("utf-8")
+        prompt_template = """
+            Human: Create an SQL query for a retail website to answer the question.
+            Database is implemented in MySQL.
+            Enclose the query in <query></query>. 
+            Do not use newline character or "\n". 
+            Use "like" and to_upper for string comparison. For example, if the query contains "jackets", use like upper('%jacket%'). If the query contains "pants", use like upper('%pant%')
+            If the question is not related to e-commerce or clothing, then do not generate any query in <query></query> and do not answer the question. Instead, mention that the answer is not found in context. 
+            Do not mention about SQL or schema or database. Do not include details about tables or database. 
+
+            <schema>
+                {schema}
+            </schema>
+
+            Question: {question}
+
+            Assistant:"""
+
+        multi_var_prompt = PromptTemplate(
+                template=prompt_template, input_variables=["question","schema"]
+                )
+            
+        llm = Bedrock(model_id="anthropic.claude-instant-v1", client=boto3_bedrock)
+        
+        prompt = multi_var_prompt.format(question=question, schema=schema)
+
+        try: 
+            llm_response = llm(prompt)
+            print(llm_response)
+
+            if "<query>".upper() not in llm_response.upper():
+                print("no query generated")
+                is_query_generated  = False
+                describe_query_result = llm_response
+                resultset=''
+                query=''
+            
+            else: 
+                is_query_generated = True
+                # Extract the query from the response
+                query = extract_strings_recursive(llm_response, "query")[0]
+                print("generated query: " +query)
+
+                # Execute the extracted query
+                cursor = mysqldb.cursor()
+                cursor.execute(query)
+                
+                rs = []
+                query_result = cursor.fetchall()
+
+                for x in query_result:
+                    rs.append(x)
+
+                resultset = ''.join(str(s)+"\n" for s in rs)
+
+                print("resultset: " +resultset)
+
+                is_answered = True
+                prompt_template = """
+
+                Human: This is a Q&A application. We need to answer questions asked by the customer at an e-commerce store. 
+                The question asked by the customer is {question}
+                We ran an SQL query in our database to get the following result. 
+
+                <resultset>
+                {resultset}
+                </resultset>
+
+                Summarize the above result and answer the question asked by the customer. 
+
+                If the question is not related to the schema {schema}, then say "Sorry, the answer is not found in the context".
+                If <resultset></resultset> is empty or none, then the query did not return any results. Answer that the item is not available based on the question.
+                If <resultset></resultset> is not empty, then answer the question based on the items found. 
+
+                Don't say "based on the output" or "based on the query" or "based on the question" or something similar.  
+                Don't give an impression to the user that a query was run. Instead, answer naturally. 
+
+                Assistant:
+
+                """
+
+                multi_var_prompt = PromptTemplate(
+                    template=prompt_template, input_variables=["question","resultset","schema"]
+                )
+
+                prompt = multi_var_prompt.format(question=question, resultset=resultset, schema=schema)
+
+                describe_query_result = llm(prompt)
+
+                if len(describe_query_result) == 0:
+                    describe_query_result = "Sorry, I could not answer that question."
+
+        except:
+            query = "Sorry, I could not answer that question."
+
+        context = {
+            "question": question,
+            "query": query,
+            "is_query_generated": is_query_generated,
+            "is_answered": is_answered,
+            "resultset": resultset,
+            "describe_query_result": describe_query_result,
+        }
+
+    return render(request, 'store/question.html', context)
