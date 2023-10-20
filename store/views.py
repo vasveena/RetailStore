@@ -24,8 +24,6 @@ from decouple import config
 import boto3
 import string
 import numpy as np
-#from skimage import io
-import matplotlib.pyplot as plt
 import requests
 import psycopg2
 from pgvector.psycopg2 import register_vector
@@ -596,7 +594,7 @@ def ask_question(request):
         question = request.GET.get('question')
         print("question: " +question)
         s3 = boto3.client('s3')
-        resp = s3.get_object(Bucket=config('AWS_STORAGE_BUCKET_NAME'), Key="data/postgres-schema.sql")
+        resp = s3.get_object(Bucket=config('AWS_STORAGE_BUCKET_NAME'), Key="data/schema-postgres.sql")
         schema = resp['Body'].read().decode("utf-8")
         prompt_template = """
             Human: Create an SQL query for a retail website to answer the question keeping the following rules in mind: 
@@ -657,11 +655,11 @@ def ask_question(request):
 
                 # Execute the extracted query
                 cursor.execute(query)
-                
-                resultset = ''
+            
                 query_result = cursor.fetchall()
                 dbconn.close()
-
+                
+                resultset = ''
                 if len(query_result) > 0:
                     for x in query_result:
                         resultset = resultset + ''.join(str(x)) + "\n"
