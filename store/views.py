@@ -10,15 +10,24 @@ from django.db.models import Q
 from django.contrib import messages
 from orders.models import OrderProduct
 import os
-import json
 from utils import bedrock, print_ww
 from langchain.llms.bedrock import Bedrock
 from langchain import PromptTemplate
 import warnings
+from PIL import Image
+import base64
+import io
+import json
+import random
+from django.core.files.base import ContentFile
+from decouple import config
+import boto3
+import string
+
+# Initialize Bedrock client 
+boto3_bedrock = bedrock.get_bedrock_client(assumed_role=os.environ.get("BEDROCK_ASSUME_ROLE", None), region=os.environ.get("AWS_DEFAULT_REGION", None))
 
 # Create your views here.
-
-boto3_bedrock = bedrock.get_bedrock_client(assumed_role=os.environ.get("BEDROCK_ASSUME_ROLE", None), region=os.environ.get("AWS_DEFAULT_REGION", None))
 
 def store(request, category_slug=None):
     categories = None
@@ -45,10 +54,13 @@ def store(request, category_slug=None):
     return render(request, 'store/store.html', context)
 
 def product_detail(request, category_slug, product_slug):
-    request.session['generated_flag'] = False
+    request.session['product_description_flag'] = False
     request.session['product_details'] = None
     request.session['draft_flag'] = False
     request.session['summary_flag'] = False
+    request.session['image_flag'] = False
+    del request.session['change_prompt']
+    del request.session['negative_prompt']
     request.session.modified = True
 
     try:
@@ -116,7 +128,7 @@ def submit_review(request, product_id):
                 messages.success(request, 'Thank you! Your review has been submitted.')
                 return redirect(url)
 
-def generate_description(request, product_id, flag=False):
+def generate_description(request, product_id):
    try:
         single_product = Product.objects.get(id=product_id)
         product_gallery = ProductGallery.objects.filter(product_id=single_product.id)
@@ -127,7 +139,6 @@ def generate_description(request, product_id, flag=False):
    context = {
         'single_product': single_product,
         'product_gallery': product_gallery,
-        'flag': flag,
     }
    return render(request, 'store/generate_description.html', context)
 
@@ -195,7 +206,7 @@ def generate_product_description(request, product_id):
     request.session['product_details'] = product_details
     request.session['generated_description'] = generated_description
     request.session['prompt'] = prompt
-    request.session['generated_flag'] = True
+    request.session['product_description_flag'] = True
     request.session.modified = True
     return redirect(url)
 
@@ -209,7 +220,7 @@ def save_product_description(request, product_id):
             messages.success(request, success_message)
             return redirect('product_detail', single_product.category.slug, single_product.slug)
         elif 'regenerate' in request.POST:
-            request.session['generated_flag'] = False
+            request.session['product_description_flag'] = False
             request.session.modified = True
             return redirect('generate_description', single_product.id)
         else:
@@ -419,4 +430,131 @@ def save_summary(request, product_id):
     except:
         pass
 
+def ask_question(request):
+    return render(request, 'store/question.html')
+
+def design_studio(request, product_id):
+    single_product = Product.objects.get(id=product_id)
+    context = {
+        'single_product': single_product,
+    }
+    return render(request, 'store/studio.html', context)
+
+def image_to_base64(img) -> str:
+    """Convert a PIL Image or local image file path to a base64 string for Amazon Bedrock"""
+    if isinstance(img, str):
+        if os.path.isfile(img):
+            with open(img, "rb") as f:
+                return base64.b64encode(f.read()).decode("utf-8")
+        else:
+            raise FileNotFoundError(f"File {img} does not exist")
+    elif isinstance(img, Image.Image):
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+        return base64.b64encode(buffer.getvalue()).decode("utf-8")
+    else:
+        raise ValueError(f"Expected str (filename) or PIL Image. Got {type(img)}")
+
+def create_design_ideas(request, product_id):
+
+    url = request.META.get('HTTP_REFERER')
+    single_product = Product.objects.get(id=product_id)
+    bucket_name = config('AWS_STORAGE_BUCKET_NAME')
+    s3 = boto3.client('s3')
+    
+    try:
+        if 'delete_previous' in request.GET:
+            # Delete existing gallery 
+            print("image path: " +request.session['image_file_path'])
+            product_gallery_del = ProductGallery.objects.filter(product=single_product, image=request.session['image_file_path'])
+            if product_gallery_del:
+                print("am here")
+                s3.delete_object(Bucket=bucket_name, Key=request.session['image_file_path'])
+                product_gallery_del.delete()
+                del request.session['image_flag']
+            return redirect('create_design_ideas', single_product.id)
+        
+        if 'delete_all' in request.GET:
+            # Delete existing gallery 
+            del request.session['image_flag']
+            product_gallery_del = ProductGallery.objects.filter(product=single_product)
+            if product_gallery_del:
+                for x in product_gallery_del:
+                    key = x.image.url.split(".com/",1)[1]
+                    s3.delete_object(Bucket=bucket_name, Key=key)
+                product_gallery_del.delete()
+            return redirect('create_design_ideas', single_product.id)
+        
+        image = Image.open(single_product.images)
+        resize = image.resize((512,512))
+
+        # Get inference parameters from form
+        change_prompt = request.GET.get('change_prompt')
+        negprompts = request.GET.get('negative_prompt')
+        negative_prompts = []
+        for negprompt in negprompts.split('\n'):
+            negative_prompts.append(negprompt.replace('\r',''))
+        start_schedule = float(request.GET.get('start_schedule')) or 0.5
+        steps = int(request.GET.get('steps')) or 30
+        cfg_scale = int(request.GET.get('cfg_scale')) or 10
+        image_strength = float(request.GET.get('image_strength')) or 0.5
+        denoising_strength = float(request.GET.get('denoising_strength')) or 0.5
+        seed = int(request.GET.get('seed')) or random.randint(1, 1000000)
+        style_preset = request.GET.get('style_preset') or "photographic"
+        init_image_b64 = image_to_base64(resize)
+        sd_request = json.dumps({
+                    "text_prompts": (
+                        [{"text": change_prompt, "weight": 1.0}]
+                        + [{"text": negprompt, "weight": -1.0} for negprompt in negative_prompts]
+                    ),
+                    "cfg_scale": cfg_scale,
+                    "init_image": init_image_b64,
+                    "seed": seed,
+                    "start_schedule": start_schedule,
+                    "steps": steps,
+                    "style_preset": style_preset,
+                    "image_strength":image_strength,
+                    "denoising_strength": denoising_strength
+                })
+        
+        response = boto3_bedrock.invoke_model(body=sd_request, modelId="stability.stable-diffusion-xl")
+        response_body = json.loads(response.get("body").read())
+        genimage_b64_str = response_body["artifacts"][0].get("base64")
+        genimage = Image.open(io.BytesIO(base64.decodebytes(bytes(genimage_b64_str, "utf-8"))))
+        
+        # Save the image to an in-memory file
+        in_mem_file = io.BytesIO()
+        genimage.save(in_mem_file, format="PNG")
+        in_mem_file.seek(0)
+
+        # Upload image to static s3 path
+
+        image_file_path = single_product.slug + "_generated" + ''.join(random.choices(string.ascii_lowercase, k=5)) + ".png"
+    
+        s3.upload_fileobj(
+            in_mem_file, # image
+            bucket_name,
+            'media/store/products/' + image_file_path,
+            ExtraArgs={
+                'ACL': 'public-read'
+            }
+        )
+
+        # Save generated image to database
+        product_gallery = ProductGallery()
+        product_gallery.product = single_product
+        product_gallery.image = 'store/products/' + image_file_path
+        product_gallery.save()
+        
+        request.session['change_prompt'] = change_prompt
+        request.session['negative_prompt'] = negprompts
+        request.session['image_file_path'] = 'store/products/' + image_file_path
+        request.session['image_flag'] = True
+        request.session['image_url'] = product_gallery.image.url
+        request.session.modified = True
+        messages.success(request, "Design idea saved!")
             
+    except Exception as e: 
+        print(e)
+        
+    return redirect(url)

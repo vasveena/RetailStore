@@ -16,4 +16,7 @@ urlpatterns = [
     path('generate_summary/<int:product_id>/', views.generate_summary, name='generate_summary'),
     path('generate_review_summary/<int:product_id>/', views.generate_review_summary, name='generate_review_summary'),
     path('save_summary/<int:product_id>/', views.save_summary, name='save_summary'),
+    path('ask_question/', views.ask_question, name='ask_question'),
+    path('design_studio/<int:product_id>/', views.design_studio, name='design_studio'),
+    path('create_design_ideas/<int:product_id>', views.create_design_ideas, name='create_design_ideas'),
 ]

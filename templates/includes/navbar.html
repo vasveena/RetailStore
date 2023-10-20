@@ -7,8 +7,7 @@
       </button>
       <div class="collapse navbar-collapse" id="navbarTop4">
         <ul class="navbar-nav mr-auto">
-            <li><a href="#" class="nav-link"> <i class="fa fa-question"></i> Ask a question </a></li>
-            <!--li><a href="#" class="nav-link"> <i class="fa fa-comments-o"></i> Chat with an agent </a></li-->
+            <li><a href="{% url 'ask_question' %}" class="nav-link"> <i class="fa fa-question"></i> Ask a question </a></li>
         </ul>
         <ul class="navbar-nav">
             <!--li><a href="#" class="nav-link"> <i class="fa fa-question"></i> Ask a question </a></li>
@@ -26,8 +25,6 @@
                 <img class="logo" src="{% static './images/reinvent-black.png' %}">
             </a> <!-- brand-wrap.// -->
         </div>
-        <div>&nbsp&nbsp&nbsp&nbsp</div>
-        <a href="#" class="btn btn-secondary">Design Studio</a>
         <div class="col-lg col-sm col-md col-6 flex-grow-0">
             <div class="category-wrap dropdown d-inline-block float-right">
                 <button type="button" class="btn btn-primary dropdown-toggle" data-toggle="dropdown"> 
