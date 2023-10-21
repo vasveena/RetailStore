@@ -35,7 +35,7 @@ langsmith==0.0.43
 marshmallow==3.20.1
 multidict==6.0.4
 mypy-extensions==1.0.0
-numpy==1.26.1
+numpy==1.24.4
 packaging==23.2
 pathspec==0.10.1
 pgvector==0.2.3
