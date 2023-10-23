@@ -734,16 +734,10 @@ def vector_search(request):
             dbconn.set_session(autocommit=True)
             cur = dbconn.cursor()
 
-            cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-            register_vector(dbconn)
-            cur.execute("""CREATE INDEX ON vector_products2 
-               USING ivfflat (descriptions_embeddings vector_l2_ops) WITH (lists = 100);""")
-            cur.execute("VACUUM ANALYZE vector_products2;")
-
             #print(search_embedding)
 
             cur.execute("""SELECT id, url, description, descriptions_embeddings 
-                        FROM vector_products2 
+                        FROM vector_products
                         ORDER BY descriptions_embeddings <-> %s limit 10;""", 
                         (np.array(search_embedding),))
 
