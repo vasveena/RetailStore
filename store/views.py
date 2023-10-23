@@ -732,6 +732,7 @@ def vector_search(request):
 
             dbconn = psycopg2.connect(host=dbhost, user=dbuser, password=dbpass, port=dbport, database=dbname, connect_timeout=10)
             dbconn.set_session(autocommit=True)
+            register_vector(dbconn)
             cur = dbconn.cursor()
 
             #print(search_embedding)
