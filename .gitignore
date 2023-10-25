@@ -2,7 +2,17 @@
 *.log
 *.pot
 *.pyc
+.DS_Store
 __pycache__
+__pycache__/
+__pycache__/*
+*/__pycache__
+*/__pycache__/
+*/__pycache__/*
+*__pycache__
+*__pycache__/
+*__pycache__/*
+
 env/
 venv/
 env/*
