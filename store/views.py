@@ -602,7 +602,7 @@ def ask_question(request):
             2. Enclose the query in <query></query>. 
             3. Do not use newline character or "\n". 
             4. Use "like" and upper() for string comparison on both left hand side and right hand side of the expression. For example, if the query contains "jackets", use "where upper(product_name) like upper('%jacket%')". 
-            5. For date queries, postgres looks like this "NOW() - INTERVAL '30 MINUTES'" to indicate the last 30 mins. 
+            5. For queries that contain date ranges, postgres syntax looks like this "NOW() - INTERVAL 'x MINUTES'" to indicate the last x mins. 
             6. If the question is generic, like "where is mount everest" or "who went to the moon first", then do not generate any query in <query></query> and do not answer the question in any form. Instead, mention that the answer is not found in context.
             7. If the question is not related to the schema, then do not generate any query in <query></query> and do not answer the question in any form. Instead, mention that the answer is not found in context.  
 
