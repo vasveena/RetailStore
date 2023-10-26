@@ -7,6 +7,10 @@ Parameters:
     Default: "ws-default-keypair"
     ConstraintDescription: Can contain only ASCII characters.
 
+  DefaultCodeRepository:
+    Default: https://github.com/vasveena/RetailStore.git
+    Type: String
+
 Conditions:
   IsUSEast1: !Equals [ !Ref "AWS::Region", us-east-1 ]
 
@@ -24,6 +28,7 @@ Mappings:
       CIDR: 80.0.64.0/20 
 
 Resources:
+#### -------- NETWORKING + IAM --------- ####
   DBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
@@ -112,10 +117,6 @@ Resources:
         - !Ref PublicRouteTable
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
       VpcId: !Ref VPC
-      SecurityGroupIds: 
-          - Fn::GetAtt:
-              - EC2SecurityGroup
-              - GroupId
 
   ElasticBeanstalkVPCEndpoint:
     Type: "AWS::EC2::VPCEndpoint"
@@ -421,6 +422,8 @@ Resources:
                 Rules:
                   - ObjectOwnership: BucketOwnerPreferred
 
+  #### -------- RDS POSTGRES DATABASE --------- ####
+
   RDSPostgresDBSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
@@ -465,7 +468,8 @@ Resources:
       TargetId: !Ref RDSPostgresDBCluster
       TargetType: AWS::RDS::DBCluster
 
-          
+  #### -------- CLOUD9 --------- ####
+
   Cloud9EC2Environment: 
 
     Type: AWS::Cloud9::EnvironmentEC2
@@ -477,6 +481,8 @@ Resources:
       Name: reinvent-retails-dev-env
       SubnetId: !Ref PublicSubnetOne
       #OwnerArn:
+
+  #### -------- JUMP HOST --------- ####
 
   Ec2Instance: 
       Type: AWS::EC2::Instance
@@ -526,7 +532,7 @@ Resources:
                 psql -h $host -U $username -p $port -d postgres < /home/ec2-user/data/data/postgres-vectordb.sql
 
                 # Create S3 Zip archive for Elastic beanstalk application
-                git clone https://github.com/vasveena/RetailStore.git -b ai --single-branch
+                git clone ${CodeRepository} -b ai --single-branch
                 sed -i "s|reinvent-retail-store-artifacts|${S3BucketName}|g" /home/ec2-user/RetailStore/retailstore/settings.py
                 sed -i "s|postgresdb-secret|postgresdb-secrets|g" /home/ec2-user/RetailStore/retailstore/settings.py
                 sed -i "s|postgresdb-secret|postgresdb-secrets|g" /home/ec2-user/RetailStore/store/views.py
@@ -538,7 +544,8 @@ Resources:
 
                 #Signal done to CloudFormation
                 /opt/aws/bin/cfn-signal -e $? -d "User Data" -r "Build Process Complete" '${PrivateWaitHandle}'
-            - S3BucketName: !Ref S3Bucket
+            -  S3BucketName: !Ref S3Bucket
+               CodeRepository: !Ref DefaultCodeRepository
 
   PrivateWaitHandle:
       Type: AWS::CloudFormation::WaitConditionHandle
@@ -548,8 +555,10 @@ Resources:
       Type: AWS::CloudFormation::WaitCondition
       Properties:
         Handle: !Ref PrivateWaitHandle
-        Timeout: '10'
+        Timeout: '600'
         Count: 1
+
+  #### -------- ELASTIC BEANSTALK --------- ####
 
   ElasticBeanstalkApplication:
       DependsOn: PrivateWaitCondition
@@ -625,7 +634,78 @@ Resources:
           Name: WebServer
           Type: Standard
 
+  #### -------- NOTEBOOK --------- ####
+  NotebookInstance:
+    Type: AWS::SageMaker::NotebookInstance
+    Properties:
+      InstanceType: !If [IsUSEast1, ml.t2.large, ml.t3.large]
+      RoleArn: !GetAtt NotebookExecutionRole.Arn
+      SubnetId: !Ref PublicSubnetOne
+      SecurityGroupIds:
+        - !Ref NotebookSecurityGroup
+      DefaultCodeRepository: !Ref DefaultCodeRepository
+      VolumeSizeInGB: 5
+  
+  NotebookSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Notebook Instance Security Group
+      VpcId: !Ref VPC
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+  NotebookExecutionRole: 
+    Type: AWS::IAM::Role
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "sagemaker.amazonaws.com"
+                - "translate.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+        - Fn::GetAtt:
+            - ApplicationAccessPolicy
+            - PolicyArn
+      Policies:
+        - 
+          PolicyName: "s3_access"
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: 
+              - 
+                Effect: "Allow"
+                Action: 
+                  - "s3:PutBucketPolicy"
+                  - "s3:DeleteBucket"
+                Resource: "arn:aws:s3:::sagemaker-*"
+
 Outputs:
-  Secret:
+  ElasticBeanstalkEndpointURL:
     Value:
       Fn::GetAtt: ElasticBeanstalkEnv.EndpointURL
+
+  NotebookInstanceURL:
+    Description: SageMaker Notebook Instance URL
+    Value: !Join
+      - ''
+      - - !Sub 'https://console.aws.amazon.com/sagemaker/home?region=${AWS::Region}#/notebook-instances/openNotebook/'
+        - !GetAtt NotebookInstance.NotebookInstanceName
+        - '?view=classic'
