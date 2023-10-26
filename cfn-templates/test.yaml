@@ -224,7 +224,7 @@ Resources:
     Type: 'AWS::EC2::Subnet'
     Properties:
       AvailabilityZone: !Select
-        - 4
+        - 3
         - !GetAZs
           Ref: 'AWS::Region'
       VpcId: !Ref VPC
