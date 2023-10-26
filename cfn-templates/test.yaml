@@ -553,7 +553,8 @@ Resources:
 
                 sed -i "s|postgresdb-secret|postgresdb-secrets|g" /home/ec2-user/RetailStore/retailstore/settings.py
                 sed -i "s|postgresdb-secret|postgresdb-secrets|g" /home/ec2-user/RetailStore/store/views.py
-                zip RetailStore.zip -r RetailStore .[^.]*
+                cd /home/ec2-user/RetailStore
+                zip /home/ec2-user/RetailStore.zip -r * .[^.]*
                 aws s3 cp /home/ec2-user/RetailStore.zip s3://${S3BucketName}/apparchive/ --acl bucket-owner-full-control
                 aws s3 cp /home/ec2-user/data/media/ s3://${S3BucketName}/media/ --acl public-read --recursive 
                 aws s3 cp /home/ec2-user/data/static/ s3://${S3BucketName}/static/ --acl public-read --recursive 
@@ -645,9 +646,6 @@ Resources:
           - Namespace: aws:elasticbeanstalk:application:environment
             OptionName: DJANGO_SETTINGS_MODULE
             Value: retailstore.settings
-          - Namespace: aws:elasticbeanstalk:application:environment
-            OptionName: SECRET_KEY
-            Value: 9uv_n_vre2=w&4zw$a7sh!ifx5((ww9h)z%-z+zmw#79q0pmze
           - Namespace: aws:elasticbeanstalk:application:environment
             OptionName: AWS_STORAGE_BUCKET_NAME
             Value: !Ref S3Bucket
