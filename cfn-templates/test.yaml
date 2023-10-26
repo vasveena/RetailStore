@@ -557,7 +557,7 @@ Resources:
                 aws s3 cp /home/ec2-user/RetailStore.zip s3://${S3BucketName}/apparchive/ --acl bucket-owner-full-control
                 aws s3 cp /home/ec2-user/data/media/ s3://${S3BucketName}/media/ --acl public-read --recursive 
                 aws s3 cp /home/ec2-user/data/static/ s3://${S3BucketName}/static/ --acl public-read --recursive 
-                aws s3 cp /home/ec2-user/data/data/ s3://${S3BucketName}/data/ --recursive 
+                aws s3 cp /home/ec2-user/data/data/ s3://${S3BucketName}/data/ --acl bucket-owner-full-control --recursive 
 
                 sudo chown -R ec2-user:ec2-user /home/ec2-user/RetailStore/
 
