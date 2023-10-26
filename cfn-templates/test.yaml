@@ -54,6 +54,10 @@ Resources:
           FromPort: 443
           ToPort: 443
           CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
 
   EC2SecurityGroupIngressRule:
     Type: AWS::EC2::SecurityGroupIngress
@@ -298,13 +302,13 @@ Resources:
               - 'secretsmanager:GetSecretValue'
             Resource: 
               - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:postgresdb-secret*'
-          - Effect: Allow
+         - Effect: Allow
             Action:
               - 's3:GetObject'
               - 's3:GetObjectAcl'
               - 's3:PutObject'
               - 's3:PutObjectAcl'
-              - 's3:ListBucket'
+              - 's3:List*'
               - 's3:AbortMultipartUpload'
             Resource: 
               - Fn::Join:
@@ -318,6 +322,12 @@ Resources:
                     - S3Bucket
                     - Arn
                   - "/*"
+              - Fn::Sub: s3://elasticbeanstalk-${AWS::Region}-${AWS::AccountId}/
+              - Fn::Sub: s3://elasticbeanstalk-${AWS::Region}-${AWS::AccountId}/*
+         - Effect: Allow
+            Action:
+              - 's3:GetObject'
+            Resource: "*"
           - Effect: Allow
             Action:
               - 'elasticbeanstalk:CreateEnvironment'
@@ -534,10 +544,13 @@ Resources:
                 # Create S3 Zip archive for Elastic beanstalk application
                 git clone ${CodeRepository} -b ai --single-branch
                 echo "AWS_STORAGE_BUCKET_NAME=${S3BucketName}" > /home/ec2-user/RetailStore/retailstore/.env
+                aws s3 cp s3://reinvent-retail-store-artifacts/data/config.yml .
+                mkdir -p /home/ec2-user/RetailStore/retailstore/.elasticbeanstalk/
+                mv ./config.yml /home/ec2-user/RetailStore/retailstore/.elasticbeanstalk/config.yml
                 sed -i "s|postgresdb-secret|postgresdb-secrets|g" /home/ec2-user/RetailStore/retailstore/settings.py
                 sed -i "s|postgresdb-secret|postgresdb-secrets|g" /home/ec2-user/RetailStore/store/views.py
                 zip RetailStore.zip -r RetailStore .[^.]*
-                aws s3 cp /home/ec2-user/RetailStore.zip s3://${S3BucketName}/apparchive/
+                aws s3 cp /home/ec2-user/RetailStore.zip s3://${S3BucketName}/apparchive/ --acl bucket-owner-full-control
                 aws s3 cp /home/ec2-user/data/media/ s3://${S3BucketName}/media/ --acl public-read --recursive 
                 aws s3 cp /home/ec2-user/data/static/ s3://${S3BucketName}/static/ --acl public-read --recursive 
                 aws s3 cp /home/ec2-user/data/data/ s3://${S3BucketName}/data/ --recursive 
