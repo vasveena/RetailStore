@@ -112,6 +112,10 @@ Resources:
         - !Ref PublicRouteTable
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
       VpcId: !Ref VPC
+      SecurityGroupIds: 
+          - Fn::GetAtt:
+              - EC2SecurityGroup
+              - GroupId
 
   ElasticBeanstalkVPCEndpoint:
     Type: "AWS::EC2::VPCEndpoint"
@@ -119,6 +123,10 @@ Resources:
       VpcEndpointType: Interface
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.elasticbeanstalk'
       VpcId: !Ref VPC
+      SecurityGroupIds: 
+          - Fn::GetAtt:
+              - EC2SecurityGroup
+              - GroupId
 
   ElasticBeanstalkHealthVPCEndpoint:
     Type: "AWS::EC2::VPCEndpoint"
@@ -126,6 +134,21 @@ Resources:
       VpcEndpointType: Interface
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.elasticbeanstalk-health'
       VpcId: !Ref VPC
+      SecurityGroupIds: 
+          - Fn::GetAtt:
+              - EC2SecurityGroup
+              - GroupId
+
+  SecretsManagerVPCEndpoint:
+    Type: "AWS::EC2::VPCEndpoint"
+    Properties:
+      VpcEndpointType: Interface
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.secretsmanager'
+      VpcId: !Ref VPC
+      SecurityGroupIds: 
+          - Fn::GetAtt:
+              - EC2SecurityGroup
+              - GroupId
 
   VPC:
     Type: 'AWS::EC2::VPC'
@@ -391,6 +414,12 @@ Resources:
                 - !Split 
                   - /
                   - !Ref "AWS::StackId"
+      PublicAccessBlockConfiguration:
+                BlockPublicAcls: false
+                IgnorePublicAcls: false
+      OwnershipControls:
+                Rules:
+                  - ObjectOwnership: BucketOwnerPreferred
 
   RDSPostgresDBSecret:
     Type: AWS::SecretsManager::Secret
@@ -485,7 +514,7 @@ Resources:
                 unzip data.zip
 
                 # Load static data into DB
-                secrets=$(aws secretsmanager get-secret-value --secret-id postgresdb-secrets --query SecretString --output text --region us-east-1)
+                secrets=$(aws secretsmanager get-secret-value --secret-id postgresdb-secrets --query SecretString --output text --region ${AWS::Region})
                 host=$(echo $secrets | jq .host | sed 's|\"||g')
                 username=$(echo $secrets | jq .username | sed 's|\"||g')
                 password=$(echo $secrets | jq .password | sed 's|\"||g')
@@ -503,14 +532,100 @@ Resources:
                 sed -i "s|postgresdb-secret|postgresdb-secrets|g" /home/ec2-user/RetailStore/store/views.py
                 zip RetailStore.zip -r RetailStore .[^.]*
                 aws s3 cp /home/ec2-user/RetailStore.zip s3://${S3BucketName}/apparchive/
+                aws s3 cp /home/ec2-user/data/media/ s3://${S3BucketName}/media/ --acl public-read --recursive 
+                aws s3 cp /home/ec2-user/data/static/ s3://${S3BucketName}/static/ --acl public-read --recursive 
                 aws s3 cp /home/ec2-user/data/data/ s3://${S3BucketName}/data/ --recursive 
-                aws s3 cp /home/ec2-user/data/media/ s3://${S3BucketName}/media/ --recursive 
-                aws s3 cp /home/ec2-user/data/static/ s3://${S3BucketName}/static/ --recursive 
 
                 #Signal done to CloudFormation
+                /opt/aws/bin/cfn-signal -e $? -d "User Data" -r "Build Process Complete" '${PrivateWaitHandle}'
             - S3BucketName: !Ref S3Bucket
+
+  PrivateWaitHandle:
+      Type: AWS::CloudFormation::WaitConditionHandle
+
+  PrivateWaitCondition:
+      DependsOn: Ec2Instance
+      Type: AWS::CloudFormation::WaitCondition
+      Properties:
+        Handle: !Ref PrivateWaitHandle
+        Timeout: '10'
+        Count: 1
+
+  ElasticBeanstalkApplication:
+      DependsOn: PrivateWaitCondition
+      Type: AWS::ElasticBeanstalk::Application
+      Properties:
+        ApplicationName: reinvent-retails-application
+        Description: AWS Elastic Beanstalk Retail Application
+
+  ElasticBeanstalkAppVersion:
+    Type: AWS::ElasticBeanstalk::ApplicationVersion
+    Properties:
+      ApplicationName: !Ref ElasticBeanstalkApplication
+      Description: Version 1.0
+      SourceBundle:
+        S3Bucket: !Ref S3Bucket
+        S3Key: apparchive/RetailStore.zip
+
+  ElasticBeanstalkEnv:
+      Type: AWS::ElasticBeanstalk::Environment
+      Properties:
+        ApplicationName: !Ref ElasticBeanstalkApplication
+        Description: AWS Elastic Beanstalk Environment running re:Invent Retails web application 
+        EnvironmentName: reinvent-retails-env
+        VersionLabel: !Ref ElasticBeanstalkAppVersion
+        OptionSettings: 
+          - Namespace: 'aws:autoscaling:launchconfiguration'
+            OptionName: IamInstanceProfile
+            Value: !Ref EC2InstanceProfile
+          - Namespace: 'aws:autoscaling:launchconfiguration'
+            OptionName: SecurityGroups
+            Value: 
+              Fn::GetAtt:
+                - EC2SecurityGroup
+                - GroupId
+          - Namespace: 'aws:elasticbeanstalk:environment'
+            OptionName: ServiceRole
+            Value: !Ref ElasticBeanstalkServiceRole
+          - Namespace: 'aws:ec2:vpc'
+            OptionName: VPCId
+            Value: !Ref VPC
+          - Namespace: 'aws:ec2:vpc'
+            OptionName: Subnets
+            Value: !Join
+                      - ','
+                      - - !Ref PublicSubnetOne
+                        - !Ref PublicSubnetTwo
+                        - !Ref PublicSubnetThree
+                        - !Ref PublicSubnetFour
+          - Namespace: 'aws:ec2:instances'
+            OptionName: InstanceTypes
+            Value: !If [IsUSEast1, t2.small, t3.small]
+          - Namespace: 'aws:autoscaling:asg'
+            OptionName: MinSize
+            Value: 1
+          - Namespace: 'aws:autoscaling:asg'
+            OptionName: MaxSize
+            Value: 1
+          - Namespace: "aws:autoscaling:launchconfiguration"
+            OptionName: "EC2KeyName"
+            Value: 
+              !Ref KeyName
+          - Namespace: aws:elasticbeanstalk:application:environment
+            OptionName: AWS_DEFAULT_REGION
+            Value: !Sub ${AWS::Region}
+          - Namespace: aws:elasticbeanstalk:application:environment
+            OptionName: DJANGO_SETTINGS_MODULE
+            Value: retailstore.settings
+          - Namespace: aws:elasticbeanstalk:application:environment
+            OptionName: SECRET_KEY
+            Value: 9uv_n_vre2=w&4zw$a7sh!ifx5((ww9h)z%-z+zmw#79q0pmze
+        SolutionStackName: python-3.11
+        Tier: 
+          Name: WebServer
+          Type: Standard
 
 Outputs:
   Secret:
     Value:
-      Fn::GetAtt: RDSPostgresDBSecret.Id
+      Fn::GetAtt: ElasticBeanstalkEnv.EndpointURL
