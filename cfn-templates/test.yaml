@@ -545,9 +545,10 @@ Resources:
 
                 git clone ${CodeRepository} -b ai --single-branch
                 echo "AWS_STORAGE_BUCKET_NAME=${S3BucketName}" >> /home/ec2-user/RetailStore/.env
-                aws s3 cp s3://reinvent-retail-store-artifacts/data/config.yml .
+                cd /home/ec2-user/
+                wget https://reinvent-retail-store-artifacts.s3.amazonaws.com/data/config.yml
                 mkdir -p /home/ec2-user/RetailStore/retailstore/.elasticbeanstalk/
-                mv ./config.yml /home/ec2-user/RetailStore/retailstore/.elasticbeanstalk/config.yml
+                sudo mv ./config.yml /home/ec2-user/RetailStore/retailstore/.elasticbeanstalk/config.yml
 
                 sed -i "s|postgresdb-secret|postgresdb-secrets|g" /home/ec2-user/RetailStore/retailstore/settings.py
                 sed -i "s|postgresdb-secret|postgresdb-secrets|g" /home/ec2-user/RetailStore/store/views.py
@@ -556,6 +557,8 @@ Resources:
                 aws s3 cp /home/ec2-user/data/media/ s3://${S3BucketName}/media/ --acl public-read --recursive 
                 aws s3 cp /home/ec2-user/data/static/ s3://${S3BucketName}/static/ --acl public-read --recursive 
                 aws s3 cp /home/ec2-user/data/data/ s3://${S3BucketName}/data/ --recursive 
+
+                sudo chown -R ec2-user:ec2-user /home/ec2-user/RetailStore/
 
                 #Signal done to CloudFormation
                 /opt/aws/bin/cfn-signal -e $? -d "User Data" -r "Build Process Complete" '${PrivateWaitHandle}'
@@ -717,6 +720,7 @@ Resources:
 
 Outputs:
   ElasticBeanstalkEndpointURL:
+    Description: Elastic Beanstalk Application URL
     Value:
       Fn::GetAtt: ElasticBeanstalkEnv.EndpointURL
 
