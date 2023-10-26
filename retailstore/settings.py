@@ -28,6 +28,7 @@ from django.core.management.utils import get_random_secret_key
 
 try: 
     SECRET_KEY = config('SECRET_KEY')
+    os.environ['SECRET_KEY'] = SECRET_KEY
     print("try: "+ SECRET_KEY)
 except:
     SECRET_KEY = get_random_secret_key()
