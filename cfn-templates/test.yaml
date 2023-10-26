@@ -302,7 +302,7 @@ Resources:
               - 'secretsmanager:GetSecretValue'
             Resource: 
               - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:postgresdb-secret*'
-         - Effect: Allow
+          - Effect: Allow
             Action:
               - 's3:GetObject'
               - 's3:GetObjectAcl'
@@ -322,12 +322,8 @@ Resources:
                     - S3Bucket
                     - Arn
                   - "/*"
-              - Fn::Sub: s3://elasticbeanstalk-${AWS::Region}-${AWS::AccountId}/
-              - Fn::Sub: s3://elasticbeanstalk-${AWS::Region}-${AWS::AccountId}/*
-         - Effect: Allow
-            Action:
-              - 's3:GetObject'
-            Resource: "*"
+              - !Sub 'arn:aws:s3:::elasticbeanstalk-${AWS::Region}-${AWS::AccountId}'
+              - !Sub 'arn:aws:s3:::elasticbeanstalk-${AWS::Region}-${AWS::AccountId}/*'
           - Effect: Allow
             Action:
               - 'elasticbeanstalk:CreateEnvironment'
@@ -542,11 +538,17 @@ Resources:
                 psql -h $host -U $username -p $port -d postgres < /home/ec2-user/data/data/postgres-vectordb.sql
 
                 # Create S3 Zip archive for Elastic beanstalk application
+
+                python3 -m pip install django
+                secret=$(python3 -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())')
+                echo "SECRET_KEY=$secret" > /home/ec2-user/RetailStore/.env
+
                 git clone ${CodeRepository} -b ai --single-branch
-                echo "AWS_STORAGE_BUCKET_NAME=${S3BucketName}" > /home/ec2-user/RetailStore/retailstore/.env
+                echo "AWS_STORAGE_BUCKET_NAME=${S3BucketName}" >> /home/ec2-user/RetailStore/.env
                 aws s3 cp s3://reinvent-retail-store-artifacts/data/config.yml .
                 mkdir -p /home/ec2-user/RetailStore/retailstore/.elasticbeanstalk/
                 mv ./config.yml /home/ec2-user/RetailStore/retailstore/.elasticbeanstalk/config.yml
+
                 sed -i "s|postgresdb-secret|postgresdb-secrets|g" /home/ec2-user/RetailStore/retailstore/settings.py
                 sed -i "s|postgresdb-secret|postgresdb-secrets|g" /home/ec2-user/RetailStore/store/views.py
                 zip RetailStore.zip -r RetailStore .[^.]*
