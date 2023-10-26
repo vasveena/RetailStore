@@ -359,7 +359,7 @@ Resources:
                 - ssm.amazonaws.com
             Action: 'sts:AssumeRole'
       Path: /
-      RoleName: bastion-ec2-role
+      RoleName: jumphost-ec2-role
       ManagedPolicyArns:
         - Fn::GetAtt:
             - ApplicationAccessPolicy
@@ -450,7 +450,9 @@ Resources:
 
   Ec2Instance: 
       Type: AWS::EC2::Instance
-      DependsOn: SecretsAttachment
+      DependsOn: 
+          - SecretsAttachment
+          - S3Bucket
       Properties: 
         InstanceType: !If [IsUSEast1, t2.micro, t3.micro]
         ImageId: !If [IsUSEast1, ami-0c9e929defa073d7d, ami-060f936aec9003903]
@@ -458,7 +460,7 @@ Resources:
         IamInstanceProfile: !Ref EC2InstanceProfile
         Tags:
           - Key: Name
-            Value: bastion-host
+            Value: jump-host
         NetworkInterfaces: 
           - AssociatePublicIpAddress: "true"
             DeviceIndex: "0"
@@ -494,7 +496,7 @@ Resources:
                 psql -h $host -U $username -p $port -d postgres < /home/ec2-user/data/data/postgres-vectordb.sql
 
                 # Create S3 Zip archive for Elastic beanstalk application
-                git clone https://github.com/vasveena/RetailStore.git
+                git clone https://github.com/vasveena/RetailStore.git -b ai --single-branch
                 sed -i "s|reinvent-retail-store-artifacts|${S3BucketName}|g" /home/ec2-user/RetailStore/retailstore/settings.py
                 sed -i "s|postgresdb-secret|postgresdb-secrets|g" /home/ec2-user/RetailStore/retailstore/settings.py
                 sed -i "s|postgresdb-secret|postgresdb-secrets|g" /home/ec2-user/RetailStore/store/views.py
@@ -506,7 +508,7 @@ Resources:
 
                 #Signal done to CloudFormation
                 #/opt/aws/bin/cfn-signal -e $? -d "User Data" -r "Build Process Complete" '${PrivateWaitHandle}'
-            - S3BucketName: !Sub reinvent-retails-bucket-${AWS::AccountId}-${AWS::Region}-${AWS::StackId}
+            - S3BucketName: !Ref S3Bucket
 
 Outputs:
   Secret:
