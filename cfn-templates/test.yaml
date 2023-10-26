@@ -533,7 +533,7 @@ Resources:
 
                 # Create S3 Zip archive for Elastic beanstalk application
                 git clone ${CodeRepository} -b ai --single-branch
-                echo ${S3BucketName} > /home/ec2-user/RetailStore/retailstore/.env
+                echo "AWS_STORAGE_BUCKET_NAME=${S3BucketName}" > /home/ec2-user/RetailStore/retailstore/.env
                 sed -i "s|postgresdb-secret|postgresdb-secrets|g" /home/ec2-user/RetailStore/retailstore/settings.py
                 sed -i "s|postgresdb-secret|postgresdb-secrets|g" /home/ec2-user/RetailStore/store/views.py
                 zip RetailStore.zip -r RetailStore .[^.]*
