@@ -29,7 +29,7 @@ SECRET_KEY = '9uv_n_vre2=w&4zw$a7sh!ifx5((ww9h)z%-z+zmw#79q0pmze'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['reinvent-retails-store-env.eba-zrvmhev7.us-east-1.elasticbeanstalk.com','127.0.0.1']
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -160,10 +160,6 @@ STATIC_URL = 'https://%s/%s/' % (AWS_S3_CUSTOM_DOMAIN, AWS_LOCATION)
 STATICFILES_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
 
 DEFAULT_FILE_STORAGE = 'retailstore.media_store.MediaStorage'
-
-# media files 
-MEDIA_URL = '/media/' 
-MEDIA_ROOT = BASE_DIR / 'media'
 
 from django.contrib.messages import constants as messages
 

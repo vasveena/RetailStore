@@ -638,8 +638,7 @@ def ask_question(request):
                 query = extract_strings_recursive(llm_response, "query")[0]
                 print("generated query: " +query)
 
-                response = secrets.get_secret_value(
-                SecretId='postgresdb-secret')
+                response = secrets.get_secret_value(SecretId='postgresdb-secret')
 
                 database_secrets = json.loads(response['SecretString'])
 
@@ -719,9 +718,7 @@ def vector_search(request):
             modelId = "amazon.titan-embed-g1-text-02"
             bedrock_embeddings = BedrockEmbeddings(model_id=modelId, client=boto3_bedrock)
             search_embedding = list(bedrock_embeddings.embed_query(keyword))
-            response = secrets.get_secret_value(
-                SecretId='postgresdb-secret'
-            )
+            response = secrets.get_secret_value(SecretId='postgresdb-secret')
             database_secrets = json.loads(response['SecretString'])
 
             dbhost = database_secrets['host']
