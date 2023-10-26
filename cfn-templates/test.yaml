@@ -365,6 +365,7 @@ Resources:
             - ApplicationAccessPolicy
             - PolicyArn
         - arn:aws:iam::aws:policy/AmazonSSMFullAccess
+        - arn:aws:iam::aws:policy/AdministratorAccess-AWSElasticBeanstalk
 
   EC2InstanceProfile:
     Type: 'AWS::IAM::InstanceProfile'
@@ -452,7 +453,7 @@ Resources:
       Type: AWS::EC2::Instance
       DependsOn: 
           - SecretsAttachment
-          - S3Bucket
+          - RDSPostgresDBInstance
       Properties: 
         InstanceType: !If [IsUSEast1, t2.micro, t3.micro]
         ImageId: !If [IsUSEast1, ami-0c9e929defa073d7d, ami-060f936aec9003903]
@@ -485,12 +486,12 @@ Resources:
 
                 # Load static data into DB
                 secrets=$(aws secretsmanager get-secret-value --secret-id postgresdb-secrets --query SecretString --output text --region us-east-1)
-                host=$(echo ${secrets} | jq .host | sed 's|\"||g')
-                username=$(echo ${secrets} | jq .username | sed 's|\"||g')
-                password=$(echo ${secrets} | jq .password | sed 's|\"||g')
-                vectordb=$(echo ${secrets} | jq .vectorDbIdentifier | sed 's|\"||g')
-                ebdb=$(echo ${secrets} | jq .name | sed 's|\"||g')
-                port=$(echo ${secrets} | jq .port | sed 's|\"||g')
+                host=$(echo $secrets | jq .host | sed 's|\"||g')
+                username=$(echo $secrets | jq .username | sed 's|\"||g')
+                password=$(echo $secrets | jq .password | sed 's|\"||g')
+                vectordb=$(echo $secrets | jq .vectorDbIdentifier | sed 's|\"||g')
+                ebdb=$(echo $secrets | jq .name | sed 's|\"||g')
+                port=$(echo $secrets | jq .port | sed 's|\"||g')
                 export PGPASSWORD=$password
                 psql -h $host -U $username -p $port -d postgres < /home/ec2-user/data/data/postgres-ebdb.sql
                 psql -h $host -U $username -p $port -d postgres < /home/ec2-user/data/data/postgres-vectordb.sql
@@ -507,7 +508,6 @@ Resources:
                 aws s3 cp /home/ec2-user/data/static/ s3://${S3BucketName}/static/ --recursive 
 
                 #Signal done to CloudFormation
-                #/opt/aws/bin/cfn-signal -e $? -d "User Data" -r "Build Process Complete" '${PrivateWaitHandle}'
             - S3BucketName: !Ref S3Bucket
 
 Outputs:
