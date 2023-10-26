@@ -533,7 +533,7 @@ Resources:
 
                 # Create S3 Zip archive for Elastic beanstalk application
                 git clone ${CodeRepository} -b ai --single-branch
-                sed -i "s|reinvent-retail-store-artifacts|${S3BucketName}|g" /home/ec2-user/RetailStore/retailstore/settings.py
+                echo ${S3BucketName} > /home/ec2-user/RetailStore/retailstore/.env
                 sed -i "s|postgresdb-secret|postgresdb-secrets|g" /home/ec2-user/RetailStore/retailstore/settings.py
                 sed -i "s|postgresdb-secret|postgresdb-secrets|g" /home/ec2-user/RetailStore/store/views.py
                 zip RetailStore.zip -r RetailStore .[^.]*
@@ -629,7 +629,10 @@ Resources:
           - Namespace: aws:elasticbeanstalk:application:environment
             OptionName: SECRET_KEY
             Value: 9uv_n_vre2=w&4zw$a7sh!ifx5((ww9h)z%-z+zmw#79q0pmze
-        SolutionStackName: python-3.11
+          - Namespace: aws:elasticbeanstalk:application:environment
+            OptionName: AWS_STORAGE_BUCKET_NAME
+            Value: !Ref S3Bucket
+        SolutionStackName: '64bit Amazon Linux 2023 v4.0.5 running Python 3.11'
         Tier: 
           Name: WebServer
           Type: Standard
