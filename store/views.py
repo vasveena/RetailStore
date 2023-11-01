@@ -45,14 +45,14 @@ def store(request, category_slug=None):
 
     if category_slug != None:
        categories = get_object_or_404(Category, slug=category_slug)
-       products = Product.objects.filter(category=categories, is_available=True).order_by('id')
-       paginator = Paginator(products, 3)
+       products = Product.objects.filter(category=categories, is_available=True).order_by('category')
+       paginator = Paginator(products, 6)
        page = request.GET.get('page')
        paged_products = paginator.get_page(page)
        product_count = products.count()
     else:
-        products = Product.objects.all().filter(is_available=True).order_by('id')
-        paginator = Paginator(products, 3)
+        products = Product.objects.all().filter(is_available=True).order_by('category')
+        paginator = Paginator(products, 6)
         page = request.GET.get('page')
         paged_products = paginator.get_page(page)
         product_count = products.count()
@@ -117,9 +117,11 @@ def search(request):
 
 def submit_review(request, product_id):
     url = request.META.get('HTTP_REFERER')
+    first_name=request.POST.get('first_name')
+    last_name=request.POST.get('last_name')
     if request.method == 'POST':
         try:
-            reviews = ReviewRating.objects.get(user__id=request.user.id, product__id=product_id)
+            reviews = ReviewRating.objects.get(first_name=first_name, last_name=last_name, product__id=product_id)
             form = ReviewForm(request.POST, instance=reviews)
             form.save()
             messages.success(request, 'Thank you! Your review has been updated.')
@@ -133,7 +135,9 @@ def submit_review(request, product_id):
                 data.review = form.cleaned_data['review']
                 data.ip = request.META.get('REMOTE_ADDR')
                 data.product_id = product_id
-                data.user_id = request.user.id
+                #data.user_id = request.user.id
+                data.first_name = first_name
+                data.last_name = last_name
                 data.save()
                 messages.success(request, 'Thank you! Your review has been submitted.')
                 return redirect(url)
@@ -320,7 +324,7 @@ def create_review_response(request, product_id, review_id):
 
         # Pass in form values to the prompt template
         prompt = multi_var_prompt.format(product_name=product_name,
-                                         customer_name=review.user.full_name(),
+                                         customer_name=review.first_name,
                                          email=request.user.email,
                                          phone=request.user.phone_number,
                                          length=max_length,

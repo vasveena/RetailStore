@@ -13,7 +13,7 @@
 		<aside class="col-md-6">
 			<article class="gallery-wrap"> 
 				<div class="img-big-wrap mainImage">
-					<img src="{{single_product.images.url}}">
+				<center><img src="{{single_product.images.url}}"></center>
 				</div> <!-- img-big-wrap.// -->
 			</article> <!-- gallery-wrap .end// -->
 			
@@ -137,17 +137,19 @@
 			</div>
 <br>
 <br>
+			First Name: 
+			<input type="text" class="form-control" name="first_name" required>
+			<br>
+			Last Name:
+			<input type="text" class="form-control" name="last_name" required>
+			<br>
 			Review Title: 
 			<input type="text" class="form-control" name="subject" required>
 			<br>
 			Review: 
 			<textarea name="review" rows="6" class="form-control"></textarea>
 			<br>
-			{% if user.is_authenticated %}
-					<input type="submit" value="Submit Review" class="btn btn-primary">
-			{% else %}
-				<p>You must be logged in to post a review. <span><a href="{% url 'login' %}">Login now</a></span></p>
-			{% endif %}
+			<input type="submit" value="Submit Review" class="btn btn-primary">
 			
 		</div>
 
@@ -182,7 +184,7 @@
 
 						<div class="text">
 							<span class="date text-muted float-md-right">{{review.updated_at}} </span>
-							<h6 class="mb-1">{{review.user.full_name}} </h6>
+							<h6 class="mb-1">{{review.first_name}} {{review.last_name}}</h6>
 							<div class="rating-star">
 								<span>
 									<i class="fa fa-star{% if review.rating == 0.5 %}-half-o{% elif review.rating < 1 %}-o {% endif %}" aria-hidden="true"></i>

@@ -67,7 +67,7 @@ class Variation(models.Model):
 
 class ReviewRating(models.Model):
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
-    user = models.ForeignKey(Account, on_delete=models.CASCADE)
+    #user = models.ForeignKey(Account, on_delete=models.CASCADE)
     subject = models.CharField(max_length=100, blank=True)
     review = models.TextField(max_length=4000, blank=True)
     rating = models.FloatField()
@@ -77,6 +77,8 @@ class ReviewRating(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     generated_response = models.TextField(max_length=10000, blank=True)
     prompt = models.TextField(max_length=10000, blank=True)
+    first_name = models.CharField(max_length=100, blank=False, default="John")
+    last_name = models.CharField(max_length=100, blank=False, default="Doe")
 
     def __str__(self):
         return self.subject
