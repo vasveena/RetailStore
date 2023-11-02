@@ -15,6 +15,6 @@ urlpatterns = [
     path('generate_summary/<int:product_id>/', views.generate_summary, name='generate_summary'),
     path('save_summary/<int:product_id>/', views.save_summary, name='save_summary'),
     
-    #### IMPLEMENT GENAI VIEWS BELOW ####
+    #### REGISTER GENAI URLS BELOW ####
 
 ]
