@@ -37,7 +37,8 @@ CREATE TABLE public.accounts_account (
     is_admin boolean NOT NULL,
     is_staff boolean NOT NULL,
     is_active boolean NOT NULL,
-    is_superadmin boolean NOT NULL
+    is_superadmin boolean NOT NULL,
+    role character varying(10) NOT NULL
 );
 
 
@@ -630,7 +631,8 @@ CREATE TABLE public.store_reviewrating (
     generated_response text NOT NULL,
     prompt text NOT NULL,
     product_id integer NOT NULL,
-    user_id integer NOT NULL
+    first_name character varying(100) NOT NULL,
+    last_name character varying(100) NOT NULL
 );
 
 
@@ -1185,13 +1187,6 @@ CREATE INDEX store_reviewrating_product_id_2e1974d6 ON public.store_reviewrating
 
 
 --
--- Name: store_reviewrating_user_id_da0ed849; Type: INDEX; Schema: public; Owner: retailsdbuser
---
-
-CREATE INDEX store_reviewrating_user_id_da0ed849 ON public.store_reviewrating USING btree (user_id);
-
-
---
 -- Name: store_variation_product_id_e4f08cbc; Type: INDEX; Schema: public; Owner: retailsdbuser
 --
 
@@ -1388,14 +1383,6 @@ ALTER TABLE ONLY public.store_productgallery
 
 ALTER TABLE ONLY public.store_reviewrating
     ADD CONSTRAINT store_reviewrating_product_id_2e1974d6_fk_store_product_id FOREIGN KEY (product_id) REFERENCES public.store_product(id) DEFERRABLE INITIALLY DEFERRED;
-
-
---
--- Name: store_reviewrating store_reviewrating_user_id_da0ed849_fk_accounts_account_id; Type: FK CONSTRAINT; Schema: public; Owner: retailsdbuser
---
-
-ALTER TABLE ONLY public.store_reviewrating
-    ADD CONSTRAINT store_reviewrating_user_id_da0ed849_fk_accounts_account_id FOREIGN KEY (user_id) REFERENCES public.accounts_account(id) DEFERRABLE INITIALLY DEFERRED;
 
 
 --
