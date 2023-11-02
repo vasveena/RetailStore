@@ -737,3 +737,10 @@ Outputs:
       - - !Sub 'https://console.aws.amazon.com/sagemaker/home?region=${AWS::Region}#/notebook-instances/openNotebook/'
         - !GetAtt NotebookInstance.NotebookInstanceName
         - '?view=classic'
+
+  Cloud9IDEURL:
+    Description: Cloud9 IDE URL
+    Value: !Join
+        - ''
+        - - !Sub 'https://${AWS::Region}.console.aws.amazon.com/cloud9/ide/'
+        - - !Ref Cloud9EC2Environment
