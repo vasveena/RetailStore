@@ -70,9 +70,11 @@
 			<p>{{single_product.description}}</p>
 
 			<!-- FEATURE 1 BUTTON START -->
+
 			{% if request.user.role == "Manager" %}
 				<a href="{% url 'generate_description' single_product.id%}" class="btn btn-secondary">Generate a new product description &nbsp&nbsp<i class="fa fa-file-text-o"></i></a>
 			{% endif %}
+			
 			<!-- FEATURE 1 BUTTON END -->
 			
 			<hr>
@@ -227,6 +229,8 @@
 						{% if request.user.role == "Manager" %}
 						<a href="{% url 'create_response' single_product.id review.id %}" class="btn  btn-outline-secondary"> <span class="text">Create response&nbsp</span> <i class="fa fa-commenting"></i> </a>
 						{% endif %}
+
+						<!-- FEATURE 2 BUTTON END -->
 						
 						{% if review.generated_response|length|get_digit:"-1" > 0 %}
 							<p>

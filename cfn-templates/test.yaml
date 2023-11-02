@@ -542,7 +542,7 @@ Resources:
 
                 # Create S3 Zip archive for Elastic beanstalk application
                 cd /home/ec2-user/
-                git clone ${CodeRepository} -b ai --single-branch
+                git clone ${CodeRepository} -b root --single-branch
 
                 python3 -m pip install django
                 secretname=$(python3 -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())')
