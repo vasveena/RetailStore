@@ -861,8 +861,10 @@ def ask_question(request):
 
                 # Execute the extracted query
                 cursor.execute(query)
-            
                 query_result = cursor.fetchall()
+
+                # Close database connection
+                cursor.close()
                 dbconn.close()
                 
                 # get query result
@@ -990,13 +992,18 @@ def vector_search(request):
                 c['product_item_id'] = product_item_id   
                 combined.append(c)
 
+            # Close database connection
             cur.close()
             dbconn.close()
+
+            # Set context variables for HTML template
             context = {
                 'keyword': keyword,
                 'combined': combined,
                 'product_count': product_count,
             }
+    
+    # Render HTML template
     return render(request, 'store/vector.html', context)
 
 ####################### END SECTION - IMPLEMENT GENAI FEATURES FOR WORKSHOP ##########################

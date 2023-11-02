@@ -30,7 +30,13 @@
 				<div class="row">
 					<div class="col">
 					<div style="margin-left:10px; width:100%;">
-						<a href="{% url 'design_studio' single_product.id %}" class="btn btn-secondary">Design Studio</a>
+						<!-- FEATURE 3 BUTTON START -->
+
+						{% if request.user.role == "Manager" %}
+							<a href="{% url 'design_studio' single_product.id %}" class="btn btn-secondary">Design Studio</a>
+						{% endif %}
+
+						<!-- FEATURE 3 BUTTON END -->
 					</div>
 				</div>
 				</div>
@@ -63,7 +69,11 @@
 
 			<p>{{single_product.description}}</p>
 
-			<a href="{% url 'generate_description' single_product.id%}" class="btn btn-secondary">Generate a new product description &nbsp&nbsp<i class="fa fa-file-text-o"></i></a>
+			<!-- FEATURE 1 BUTTON START -->
+			{% if request.user.role == "Manager" %}
+				<a href="{% url 'generate_description' single_product.id%}" class="btn btn-secondary">Generate a new product description &nbsp&nbsp<i class="fa fa-file-text-o"></i></a>
+			{% endif %}
+			<!-- FEATURE 1 BUTTON END -->
 			
 			<hr>
 			<div class="container"> 
@@ -170,11 +180,19 @@
 				</span>
 		</div>
 		<br>
-		<div class="mt-3">
-			<textarea name="review_summary" rows="8" class="form-control-plaintext" readonly>{{single_product.review_summary}}</textarea>
-		</div>
-		<br>
-		<a href="{% url 'generate_summary' single_product.id %}" class="btn btn-secondary"> <span class="text">Summarize product reviews&nbsp</span> <i class="fa fa-list"></i> </a>
+		{% if single_product.review_summary|length|get_digit:"-1" > 0 %}
+			<div class="mt-3">
+				<textarea name="review_summary" rows="8" class="form-control-plaintext" readonly>{{single_product.review_summary}}</textarea>
+			</div>
+			<br>
+		{% endif %}
+		<!-- FEATURE 4 BUTTON START -->
+
+		{% if request.user.role == "Customer" %}
+			<a href="{% url 'generate_summary' single_product.id %}" class="btn btn-secondary"> <span class="text">Summarize product reviews&nbsp</span> <i class="fa fa-list"></i> </a>
+		{% endif %}
+
+		<!-- FEATURE 4 BUTTON END -->
 	</div>
 	</header>
 
@@ -204,7 +222,12 @@
 					</div>
 					<br>
 					<div>
+						<!-- FEATURE 2 BUTTON START -->
+
+						{% if request.user.role == "Manager" %}
 						<a href="{% url 'create_response' single_product.id review.id %}" class="btn  btn-outline-secondary"> <span class="text">Create response&nbsp</span> <i class="fa fa-commenting"></i> </a>
+						{% endif %}
+						
 						{% if review.generated_response|length|get_digit:"-1" > 0 %}
 							<p>
 							<br>
