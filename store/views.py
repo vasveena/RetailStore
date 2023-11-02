@@ -45,14 +45,14 @@ def store(request, category_slug=None):
 
     if category_slug != None:
        categories = get_object_or_404(Category, slug=category_slug)
-       products = Product.objects.filter(category=categories, is_available=True).order_by('id')
-       paginator = Paginator(products, 3)
+       products = Product.objects.filter(category=categories, is_available=True).order_by('category')
+       paginator = Paginator(products, 6)
        page = request.GET.get('page')
        paged_products = paginator.get_page(page)
        product_count = products.count()
     else:
-        products = Product.objects.all().filter(is_available=True).order_by('id')
-        paginator = Paginator(products, 3)
+        products = Product.objects.all().filter(is_available=True).order_by('category')
+        paginator = Paginator(products, 6)
         page = request.GET.get('page')
         paged_products = paginator.get_page(page)
         product_count = products.count()
@@ -117,9 +117,11 @@ def search(request):
 
 def submit_review(request, product_id):
     url = request.META.get('HTTP_REFERER')
+    first_name=request.POST.get('first_name')
+    last_name=request.POST.get('last_name')
     if request.method == 'POST':
         try:
-            reviews = ReviewRating.objects.get(user__id=request.user.id, product__id=product_id)
+            reviews = ReviewRating.objects.get(first_name=first_name, last_name=last_name, product__id=product_id)
             form = ReviewForm(request.POST, instance=reviews)
             form.save()
             messages.success(request, 'Thank you! Your review has been updated.')
@@ -133,7 +135,9 @@ def submit_review(request, product_id):
                 data.review = form.cleaned_data['review']
                 data.ip = request.META.get('REMOTE_ADDR')
                 data.product_id = product_id
-                data.user_id = request.user.id
+                #data.user_id = request.user.id
+                data.first_name = first_name
+                data.last_name = last_name
                 data.save()
                 messages.success(request, 'Thank you! Your review has been submitted.')
                 return redirect(url)
@@ -201,26 +205,36 @@ def generate_product_description(request, product_id):
         )
         
         # Create a prompt template that has 4 input variables for product brand, color, category and description
-        multi_var_prompt = PromptTemplate(
+        prompt_template = PromptTemplate(
             input_variables=["brand", "colors", "category", "length", "name","details"], 
             template="""
-                Human: Create a catchy product description for a {category} from the brand {brand}. Product name is {name}. The number of words should be less than {length}. 
-                Following are the product details:  
-                <product_details>
-                {details}
-                </product_details>
-                Briefly mention about all the available colors of the product. 
-                Example: Available colors are Blue, Purple and Orange. 
-                If the <available_colors> is empty, don't mention anything about the color of the product.
-                <available_colors>
-                {colors}
-                </available_colors>
+                    Human: Create a catchy product description for a {category} from the brand {brand}. 
+                    Product name is {name}. 
+                    The number of words should be less than {length}. 
+                    
+                    Following are the product details:  
+                    
+                    <product_details>
+                    {details}
+                    </product_details>
+                    
+                    Briefly mention about all the available colors of the product.
+                    
+                    Example: Available colors are Blue, Purple and Orange. 
+                    
+                    If the <available_colors> is empty, don't mention anything about the color of the product.
+                    
+                    <available_colors>
+                    {colors}
+                    </available_colors>
 
-                Assistant:"""
+                    Assistant:
+
+                    """
                 )
 
         # Pass in form values to the prompt template
-        prompt = multi_var_prompt.format(brand=product_brand, 
+        prompt = prompt_template.format(brand=product_brand, 
                                          colors=product_colors,
                                          category=product_category,
                                          length=max_length,
@@ -295,32 +309,47 @@ def create_review_response(request, product_id, review_id):
         )
         
         # Create a prompt template that has 4 input variables for product brand, color, category and description
-        multi_var_prompt = PromptTemplate(
+        prompt_template = PromptTemplate(
             input_variables=["product_name","customer_name","email","phone","length","review"], 
             template="""
-                Human: I'm the manager of re:Invent retails. Draft a response for the review of the product {product_name} from our customer {customer_name}. The number of words should be less than {length}. My contact information: {email} {phone}. 
-                <customer_review>
-                {review}
-                <customer_review>
+                    Human: 
+                    
+                    I'm the manager of re:Invent retails. 
+                    
+                    Draft a response for the review of the product {product_name} from our customer {customer_name}. 
+                    The number of words should be less than {length}. 
+                    
+                    My contact information is email: {email}, phone: {phone}.
+                    
+                    <customer_review>
+                        {review}
+                    <customer_review>
 
-                Example response pattern: 
-                Dear <customer_name>,
-                <content_body>
-                
-                <if negative review> 
-                    Don't hesitate to contact me at {email} or {phone}. 
-                <end if> 
+                    <example_response_pattern>
+                    
+                        Dear <customer_name>,
+                        <content_body>
 
-                Sincerely,
-                <signature>
-                {email}
-                {phone}
-                Assistant:"""
+                        <if negative review> 
+                            Don't hesitate to reach out to me at {phone}.
+                        <end if> 
+
+                        Sincerely,
+                        {manager_name}
+                        <signature>
+                        {email}
+                    
+                    </example_response_pattern>
+                    
+                    Assistant:
+                    
+                    """
                 )
 
         # Pass in form values to the prompt template
-        prompt = multi_var_prompt.format(product_name=product_name,
-                                         customer_name=review.user.full_name(),
+        prompt = prompt_template.format(product_name=product_name,
+                                         customer_name=review.first_name,
+                                         manager_name=request.user.full_name(),
                                          email=request.user.email,
                                          phone=request.user.phone_number,
                                          length=max_length,
@@ -388,10 +417,6 @@ def generate_review_summary(request, product_id):
 
     try:
         if 'Claude' in request.GET.get('llm'):
-            textgen_llm = Bedrock(
-                model_id="anthropic.claude-instant-v1",
-                client=boto3_bedrock,
-            )
             #Inference parameters for Claude Anthropic
             inference_modifier = {}
             inference_modifier['max_tokens_to_sample'] = int(request.GET.get('claude_max_tokens_to_sample') or 200)
@@ -399,33 +424,47 @@ def generate_review_summary(request, product_id):
             inference_modifier['top_k'] = int(request.GET.get('claude_top_k') or 250)
             inference_modifier['top_p'] = float(request.GET.get('claude_top_p') or 1)
             inference_modifier['stop_sequences'] = ["\n\nHuman"]
+
+            textgen_llm = Bedrock(
+                model_id="anthropic.claude-instant-v1",
+                client=boto3_bedrock,
+                model_kwargs=inference_modifier,
+            )
         
         elif 'Titan' in request.GET.get('llm'):
-            textgen_llm = Bedrock(
-                model_id="amazon.titan-tg1-large",
-                client=boto3_bedrock)
-
             #Inference parameters for Titan
             inference_modifier = {}
             inference_modifier['maxTokenCount'] = int(request.GET.get('titan_max_tokens_to_sample') or 200)
             inference_modifier['temperature'] = float(request.GET.get('titan_temperature') or 0.5)
             inference_modifier['topP'] = int(request.GET.get('titan_top_p') or 250)
+
+            textgen_llm = Bedrock(
+                model_id="amazon.titan-tg1-large",
+                client=boto3_bedrock,
+                model_kwargs=inference_modifier,
+                )
             
         else:
             pass
 
         #create prompt
-        multi_var_prompt = PromptTemplate(
+        prompt_template = PromptTemplate(
             input_variables=["product_name","reviews"],
             template="""
-            Human: Provide a review summary including pros and cons based on the customer reviews for the product {product_name}. This summary will be updated in the product webpage. Customer reviews are enclosed in <customer_reviews> tag. 
-            <customer_reviews>
-            {reviews}
-            <customer_reviews>
-            """)
+
+                Human: Provide a review summary including pros and cons based on the customer reviews for the product {product_name}. This summary will be updated in the product webpage. Customer reviews are enclosed in <customer_reviews> tag. 
+        
+                <customer_reviews>
+                    {reviews}
+                <customer_reviews>
+                
+                Assistant:
+
+                """
+            )
         
         # Pass in form values to the prompt template
-        prompt = multi_var_prompt.format(product_name=single_product.product_name,
+        prompt = prompt_template.format(product_name=single_product.product_name,
                                          reviews=review_digest)
 
         response = textgen_llm(prompt)
@@ -592,19 +631,18 @@ def ask_question(request):
     if 'question' in request.GET:
 
         question = request.GET.get('question')
-        print("question: " +question)
         s3 = boto3.client('s3')
         resp = s3.get_object(Bucket=config('AWS_STORAGE_BUCKET_NAME'), Key="data/schema-mysql.sql")
         schema = resp['Body'].read().decode("utf-8")
         prompt_template = """
             Human: Create an Postgres SQL query for a retail website to answer the question keeping the following rules in mind: 
+            
             1. Database is implemented in Postgres SQL.
-            2. Enclose the query in <query></query>. 
-            3. Do not use newline character or "\n". 
+            2. Postgres syntax details can be found here: https://www.postgresql.org/files/documentation/pdf/15/postgresql-15-US.pdf
+            3. Enclose the query in <query></query>. 
             4. Use "like" and upper() for string comparison on both left hand side and right hand side of the expression. For example, if the query contains "jackets", use "where upper(product_name) like upper('%jacket%')". 
-            5. For queries that contain date ranges, postgres syntax looks like this "NOW() - INTERVAL 'x MINUTES'" to indicate the last x mins. 
-            6. If the question is generic, like "where is mount everest" or "who went to the moon first", then do not generate any query in <query></query> and do not answer the question in any form. Instead, mention that the answer is not found in context.
-            7. If the question is not related to the schema, then do not generate any query in <query></query> and do not answer the question in any form. Instead, mention that the answer is not found in context.  
+            5. If the question is generic, like "where is mount everest" or "who went to the moon first", then do not generate any query in <query></query> and do not answer the question in any form. Instead, mention that the answer is not found in context.
+            6. If the question is not related to the schema, then do not generate any query in <query></query> and do not answer the question in any form. Instead, mention that the answer is not found in context.  
 
             <schema>
                 {schema}
@@ -612,15 +650,15 @@ def ask_question(request):
 
             Question: {question}
 
-            Assistant:"""
+            Assistant:
+            
+            """
 
-        multi_var_prompt = PromptTemplate(
-                template=prompt_template, input_variables=["question","schema"]
-                )
+        prompt_vars = PromptTemplate(template=prompt_template, input_variables=["question","schema"])
             
         llm = Bedrock(model_id="anthropic.claude-instant-v1", client=boto3_bedrock)
         
-        prompt = multi_var_prompt.format(question=question, schema=schema)
+        prompt = prompt_vars.format(question=question, schema=schema)
 
         try: 
             llm_response = llm(prompt)
@@ -636,10 +674,9 @@ def ask_question(request):
                 is_query_generated = True
                 # Extract the query from the response
                 query = extract_strings_recursive(llm_response, "query")[0]
-                print("generated query: " +query)
+                print("Query generated by LLM: " +query)
 
-                response = secrets.get_secret_value(
-                SecretId='postgresdb-secret')
+                response = secrets.get_secret_value(SecretId='postgresdb-secret')
 
                 database_secrets = json.loads(response['SecretString'])
 
@@ -665,7 +702,7 @@ def ask_question(request):
                     for x in query_result:
                         resultset = resultset + ''.join(str(x)) + "\n"
 
-                print("resultset: " +resultset)
+                print("Query result: \n" +resultset)
 
                 prompt_template = """
 
@@ -688,11 +725,9 @@ def ask_question(request):
 
                 """
 
-                multi_var_prompt = PromptTemplate(
-                    template=prompt_template, input_variables=["question","resultset"]
-                )
+                prompt_vars = PromptTemplate(template=prompt_template, input_variables=["question","resultset"])
 
-                prompt = multi_var_prompt.format(question=question, resultset=resultset)
+                prompt = prompt_vars.format(question=question, resultset=resultset)
 
                 describe_query_result = llm(prompt)
                 print("describe_query_result " + describe_query_result)
@@ -719,9 +754,7 @@ def vector_search(request):
             modelId = "amazon.titan-embed-g1-text-02"
             bedrock_embeddings = BedrockEmbeddings(model_id=modelId, client=boto3_bedrock)
             search_embedding = list(bedrock_embeddings.embed_query(keyword))
-            response = secrets.get_secret_value(
-                SecretId='postgresdb-secret'
-            )
+            response = secrets.get_secret_value(SecretId='postgresdb-secret')
             database_secrets = json.loads(response['SecretString'])
 
             dbhost = database_secrets['host']

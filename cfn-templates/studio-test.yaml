@@ -1,0 +1,776 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  InstanceOwner:
+    Description: Instance Owner 
+    Type: String
+  MyAssetsBucketName:
+    Description: Assets bucket name
+    Type: String
+  MyAssetsBucketPrefix:
+    Description: Assets bucket prefix
+    Type: String
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    Default: "ws-default-keypair"
+    ConstraintDescription: Can contain only ASCII characters.
+
+  DefaultCodeRepository:
+    Default: https://github.com/vasveena/RetailStore.git
+    Type: String
+
+Conditions:
+  IsUSEast1: !Equals [ !Ref "AWS::Region", us-east-1 ]
+
+Mappings:
+  SubnetConfig:
+    VPC:
+      CIDR: 80.0.0.0/16
+    PublicOne:
+      CIDR: 80.0.0.0/20
+    PublicTwo:
+      CIDR: 80.0.32.0/20
+    PublicThree:
+      CIDR: 80.0.48.0/20
+    PublicFour:
+      CIDR: 80.0.64.0/20 
+
+Resources:
+#### -------- NETWORKING + IAM --------- ####
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      SubnetIds:
+        - !Ref PublicSubnetOne
+        - !Ref PublicSubnetTwo
+        - !Ref PublicSubnetThree
+        - !Ref PublicSubnetFour
+      DBSubnetGroupDescription: DB Subnet Group from 4 AZs
+
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "self-ingress-sg"
+      GroupDescription: "Security group with self ingress rule"
+      VpcId: !Ref VPC
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+  EC2SecurityGroupIngressRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      SourceSecurityGroupId:
+       Fn::GetAtt:
+         - EC2SecurityGroup
+         - GroupId
+      GroupId:
+       Fn::GetAtt:
+         - EC2SecurityGroup
+         - GroupId
+      IpProtocol: -1
+      ToPort: -1
+      FromPort: -1
+
+  EC2SecurityGroupEgressRule:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      DestinationSecurityGroupId:
+        Fn::GetAtt:
+          - DBSecurityGroup
+          - GroupId
+      GroupId:
+        Fn::GetAtt:
+          - EC2SecurityGroup
+          - GroupId
+      IpProtocol: tcp
+      ToPort: 5432
+      FromPort: 5432
+
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "postgresdb-sg"
+      GroupDescription: "Security group with self ingress rule"
+      VpcId: !Ref VPC
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 127.0.0.1/32
+
+  DBSecurityGroupIngressRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      SourceSecurityGroupId:
+       Fn::GetAtt:
+         - EC2SecurityGroup
+         - GroupId
+      GroupId:
+       Fn::GetAtt:
+         - DBSecurityGroup
+         - GroupId
+      IpProtocol: tcp
+      ToPort: 5432
+      FromPort: 5432
+
+  S3VPCEndpoint:
+    Type: "AWS::EC2::VPCEndpoint"
+    Properties:
+      RouteTableIds:
+        - !Ref PublicRouteTable
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcId: !Ref VPC
+
+  ElasticBeanstalkVPCEndpoint:
+    Type: "AWS::EC2::VPCEndpoint"
+    Properties:
+      VpcEndpointType: Interface
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.elasticbeanstalk'
+      VpcId: !Ref VPC
+      SecurityGroupIds: 
+          - Fn::GetAtt:
+              - EC2SecurityGroup
+              - GroupId
+
+  ElasticBeanstalkHealthVPCEndpoint:
+    Type: "AWS::EC2::VPCEndpoint"
+    Properties:
+      VpcEndpointType: Interface
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.elasticbeanstalk-health'
+      VpcId: !Ref VPC
+      SecurityGroupIds: 
+          - Fn::GetAtt:
+              - EC2SecurityGroup
+              - GroupId
+
+  SecretsManagerVPCEndpoint:
+    Type: "AWS::EC2::VPCEndpoint"
+    Properties:
+      VpcEndpointType: Interface
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.secretsmanager'
+      VpcId: !Ref VPC
+      SecurityGroupIds: 
+          - Fn::GetAtt:
+              - EC2SecurityGroup
+              - GroupId
+
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      CidrBlock: !FindInMap
+        - SubnetConfig
+        - VPC
+        - CIDR
+      Tags:
+        - Key: Name
+          Value: WSVPC
+
+  PublicSubnetOne:
+    Type: 'AWS::EC2::Subnet'
+    DependsOn: GatewayAttachement
+    Properties:
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs
+          Ref: 'AWS::Region'
+      VpcId: !Ref VPC
+      CidrBlock: !FindInMap
+        - SubnetConfig
+        - PublicOne
+        - CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: WSPublicSubnetOne
+  
+  PublicSubnetTwo:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs
+          Ref: 'AWS::Region'
+      VpcId: !Ref VPC
+      CidrBlock: !FindInMap
+        - SubnetConfig
+        - PublicTwo
+        - CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: WSPublicSubnetTwo
+    
+  PublicSubnetThree:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select
+        - 2
+        - !GetAZs
+          Ref: 'AWS::Region'
+      VpcId: !Ref VPC
+      CidrBlock: !FindInMap
+        - SubnetConfig
+        - PublicThree
+        - CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: WSPublicSubnetThree
+  
+  PublicSubnetFour:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select
+        - 3
+        - !GetAZs
+          Ref: 'AWS::Region'
+      VpcId: !Ref VPC
+      CidrBlock: !FindInMap
+        - SubnetConfig
+        - PublicFour
+        - CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: WSPublicSubnetFour
+
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+  GatewayAttachement:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+
+  PublicRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn: GatewayAttachement
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetOneRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnetOne
+      RouteTableId: !Ref PublicRouteTable
+  PublicSubnetTwoRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnetTwo
+      RouteTableId: !Ref PublicRouteTable
+  PublicSubnetThreeRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnetThree
+      RouteTableId: !Ref PublicRouteTable
+  PublicSubnetFourRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnetFour
+      RouteTableId: !Ref PublicRouteTable
+
+  ApplicationAccessPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      ManagedPolicyName: reinvent-retails-application-policy
+      Roles: 
+        - AWSCloud9SSMAccessRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'bedrock:InvokeModel'
+              - 'bedrock:ListFoundationModels'
+            Resource: 
+              - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-instant-v1'
+              - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-g1-text-02'
+              - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-tg1-large'
+              - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/stability.stable-diffusion-xl'
+          - Effect: Allow
+            Action:
+              - 'secretsmanager:GetSecretValue'
+            Resource: 
+              - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:postgresdb-secret*'
+          - Effect: Allow
+            Action:
+              - 's3:GetObject'
+              - 's3:GetObjectAcl'
+              - 's3:PutObject'
+              - 's3:PutObjectAcl'
+              - 's3:List*'
+              - 's3:AbortMultipartUpload'
+            Resource: 
+              - Fn::Join:
+                - ''
+                - - Fn::GetAtt:
+                    - S3Bucket
+                    - Arn
+              - Fn::Join:
+                - ''
+                - - Fn::GetAtt:
+                    - S3Bucket
+                    - Arn
+                  - "/*"
+              - !Sub 'arn:aws:s3:::elasticbeanstalk-${AWS::Region}-${AWS::AccountId}'
+              - !Sub 'arn:aws:s3:::elasticbeanstalk-${AWS::Region}-${AWS::AccountId}/*'
+          - Effect: Allow
+            Action:
+              - 'elasticbeanstalk:CreateEnvironment'
+              - 'elasticbeanstalk:CheckDNSAvailability'
+              - 'elasticbeanstalk:CreateApplication'
+              - 'elasticbeanstalk:CreateApplicationVersion'
+              - 'elasticbeanstalk:CreateConfigurationTemplate'
+              - 'elasticbeanstalk:RebuildEnvironment'
+              - 'elasticbeanstalk:RestartAppServer'
+            Resource: 
+              - '*'
+
+  ElasticBeanstalkServiceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: elasticbeanstalk.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Path: /
+      RoleName: aws-elasticbeanstalk-service-role-v2
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkEnhancedHealth
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkManagedUpdatesCustomerRolePolicy
+
+  ElasticBeanstalkEC2Role:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Path: /
+      RoleName: aws-elasticbeanstalk-ec2-role-v2
+      ManagedPolicyArns:
+        - Fn::GetAtt:
+            - ApplicationAccessPolicy
+            - PolicyArn
+        - arn:aws:iam::aws:policy/AmazonSSMFullAccess
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkMulticontainerDocker
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWorkerTier
+
+  EC2Role:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: 
+                - ec2.amazonaws.com
+                - ssm.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Path: /
+      RoleName: jumphost-ec2-role
+      ManagedPolicyArns:
+        - Fn::GetAtt:
+            - ApplicationAccessPolicy
+            - PolicyArn
+        - arn:aws:iam::aws:policy/AmazonSSMFullAccess
+        - arn:aws:iam::aws:policy/AdministratorAccess-AWSElasticBeanstalk
+
+  EC2InstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      InstanceProfileName: ApplicationInstanceProfile
+      Roles:
+        - !Ref EC2Role
+    
+    #RAY ADDED - BEGIN
+  AWSCloud9SSMAccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - cloud9.amazonaws.com
+                - ec2.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Description: "Service linked role for AWS Cloud9"
+      Path: "/service-role/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSCloud9SSMInstanceProfile
+      RoleName: "AWSCloud9SSMAccessRole"
+
+  AWSCloud9SSMInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      InstanceProfileName: AWSCloud9SSMInstanceProfile
+      Path: "/cloud9/"
+      Roles:
+        - Ref: AWSCloud9SSMAccessRole
+
+
+#RAY ADDED - ENDS
+
+  S3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Join
+        - '-'
+        - - 'reinvent-retails-bucket'
+          - !Ref AWS::AccountId
+          - !Ref AWS::Region
+          - !Select 
+            - 0
+            - !Split 
+              - '-'
+              - !Select 
+                - 2
+                - !Split 
+                  - /
+                  - !Ref "AWS::StackId"
+      PublicAccessBlockConfiguration:
+                BlockPublicAcls: false
+                IgnorePublicAcls: false
+      OwnershipControls:
+                Rules:
+                  - ObjectOwnership: BucketOwnerPreferred
+
+  #### -------- RDS POSTGRES DATABASE --------- ####
+
+  RDSPostgresDBSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: This is a Secrets Manager secret for RDS Postgres DB cluster
+      Name: postgresdb-secrets
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "retailsdbuser","name":"ebdb","vectorDbIdentifier":"vectordb","port":"5432"}'
+        GenerateStringKey: password
+        PasswordLength: 16
+        ExcludeCharacters: "\"'@/\\"
+
+  RDSPostgresDBCluster:
+    Type: 'AWS::RDS::DBCluster'
+    Properties:
+      MasterUsername: !Sub "{{resolve:secretsmanager:${RDSPostgresDBSecret}::username}}"
+      MasterUserPassword: !Sub "{{resolve:secretsmanager:${RDSPostgresDBSecret}::password}}"
+      DBClusterIdentifier: postgresdb-reinvent-retails
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VpcSecurityGroupIds:
+         - Fn::GetAtt:
+            - DBSecurityGroup
+            - GroupId
+      Engine: aurora-postgresql
+      EngineVersion: 15.4
+      Port: 5432
+      DBClusterParameterGroupName: default.aurora-postgresql15
+      StorageEncrypted: true
+
+  RDSPostgresDBInstance:
+    Type: "AWS::RDS::DBInstance"
+    Properties:
+      DBClusterIdentifier: !Ref RDSPostgresDBCluster
+      PubliclyAccessible: false
+      DBInstanceClass: "db.t3.medium"
+      Engine: "aurora-postgresql"
+      AutoMinorVersionUpgrade: false
+
+  SecretsAttachment:
+    Type: AWS::SecretsManager::SecretTargetAttachment
+    Properties:
+      SecretId: !Ref RDSPostgresDBSecret
+      TargetId: !Ref RDSPostgresDBCluster
+      TargetType: AWS::RDS::DBCluster
+
+  #### -------- CLOUD9 --------- ####
+
+  Cloud9EC2Environment: 
+
+    Type: AWS::Cloud9::EnvironmentEC2
+    Properties:
+      ConnectionType: CONNECT_SSM
+      Description: reinvent retails dev environment
+      ImageId: amazonlinux-2-x86_64
+      InstanceType: !If [IsUSEast1, t2.small, t3.small]
+      Name: reinvent-retails-dev-env
+      SubnetId: !Ref PublicSubnetOne
+#      OwnerArn: 
+#        Fn::If:
+#          - AssignCloud9Owner
+#          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:assumed-role/${InstanceOwner}
+#          - Ref: AWS::NoValue
+           
+  #### -------- JUMP HOST --------- ####
+
+  Ec2Instance: 
+      Type: AWS::EC2::Instance
+      DependsOn: 
+          - SecretsAttachment
+          - RDSPostgresDBInstance
+      Properties: 
+        InstanceType: !If [IsUSEast1, t2.micro, t3.micro]
+        ImageId: !If [IsUSEast1, ami-0c9e929defa073d7d, ami-060f936aec9003903]
+        KeyName: !Ref KeyName
+        IamInstanceProfile: !Ref EC2InstanceProfile
+        Tags:
+          - Key: Name
+            Value: jump-host
+        NetworkInterfaces: 
+          - AssociatePublicIpAddress: "true"
+            DeviceIndex: "0"
+            GroupSet: 
+              - !Ref EC2SecurityGroup
+            SubnetId: !Ref PublicSubnetOne
+        UserData:
+          Fn::Base64: !Sub 
+            - |
+                #!/bin/bash -x
+
+                # Install required packages
+                sudo amazon-linux-extras enable postgresql14 -y
+                sudo yum clean metadata -y
+                sudo yum install postgresql jq git -y
+
+                # Download static files
+                sudo su ec2-user 
+                cd /home/ec2-user
+                wget https://reinvent-retail-store-artifacts.s3.amazonaws.com/zips/data.zip
+                unzip data.zip
+
+                # Load static data into DB
+                secrets=$(aws secretsmanager get-secret-value --secret-id postgresdb-secrets --query SecretString --output text --region ${AWS::Region})
+                host=$(echo $secrets | jq .host | sed 's|\"||g')
+                username=$(echo $secrets | jq .username | sed 's|\"||g')
+                password=$(echo $secrets | jq .password | sed 's|\"||g')
+                vectordb=$(echo $secrets | jq .vectorDbIdentifier | sed 's|\"||g')
+                ebdb=$(echo $secrets | jq .name | sed 's|\"||g')
+                port=$(echo $secrets | jq .port | sed 's|\"||g')
+                export PGPASSWORD=$password
+                psql -h $host -U $username -p $port -d postgres < /home/ec2-user/data/data/postgres-ebdb.sql
+                psql -h $host -U $username -p $port -d postgres < /home/ec2-user/data/data/postgres-vectordb.sql
+
+                # Create S3 Zip archive for Elastic beanstalk application
+                cd /home/ec2-user/
+                git clone ${CodeRepository} -b ai --single-branch
+
+                python3 -m pip install django
+                secretname=$(python3 -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())')
+
+                echo "SECRET_KEY=$secretname" >> /home/ec2-user/RetailStore/.env
+                echo "AWS_STORAGE_BUCKET_NAME=${S3BucketName}" >> /home/ec2-user/RetailStore/.env
+
+                wget https://reinvent-retail-store-artifacts.s3.amazonaws.com/data/config.yml
+                mkdir -p /home/ec2-user/RetailStore/.elasticbeanstalk/
+                sudo mv ./config.yml /home/ec2-user/RetailStore/.elasticbeanstalk/config.yml
+
+                sed -i "s|postgresdb-secret|postgresdb-secrets|g" /home/ec2-user/RetailStore/retailstore/settings.py
+                sed -i "s|postgresdb-secret|postgresdb-secrets|g" /home/ec2-user/RetailStore/store/views.py
+                cd /home/ec2-user/RetailStore
+                zip /home/ec2-user/RetailStore.zip -r * .[^.]*
+                aws s3 cp /home/ec2-user/RetailStore.zip s3://${S3BucketName}/apparchive/ --acl bucket-owner-full-control
+                aws s3 cp /home/ec2-user/data/media/ s3://${S3BucketName}/media/ --acl public-read --recursive 
+                aws s3 cp /home/ec2-user/data/static/ s3://${S3BucketName}/static/ --acl public-read --recursive 
+                aws s3 cp /home/ec2-user/data/data/ s3://${S3BucketName}/data/ --acl bucket-owner-full-control --recursive 
+
+                sudo chown -R ec2-user:ec2-user /home/ec2-user/RetailStore/
+
+                #Signal done to CloudFormation
+                /opt/aws/bin/cfn-signal -e $? -d "User Data" -r "Build Process Complete" '${PrivateWaitHandle}'
+            -  S3BucketName: !Ref S3Bucket           
+               CodeRepository: !Ref DefaultCodeRepository
+
+  PrivateWaitHandle:
+      Type: AWS::CloudFormation::WaitConditionHandle
+
+  PrivateWaitCondition:
+      DependsOn: Ec2Instance
+      Type: AWS::CloudFormation::WaitCondition
+      Properties:
+        Handle: !Ref PrivateWaitHandle
+        Timeout: '600'
+        Count: 1
+
+  #### -------- ELASTIC BEANSTALK --------- ####
+
+  ElasticBeanstalkApplication:
+      DependsOn: PrivateWaitCondition
+      Type: AWS::ElasticBeanstalk::Application
+      Properties:
+        ApplicationName: reinvent-retails-application
+        Description: AWS Elastic Beanstalk Retail Application
+
+  ElasticBeanstalkAppVersion:
+    Type: AWS::ElasticBeanstalk::ApplicationVersion
+    Properties:
+      ApplicationName: !Ref ElasticBeanstalkApplication
+      Description: Version 1.0
+      SourceBundle:
+        S3Bucket: !Ref S3Bucket
+        S3Key: apparchive/RetailStore.zip
+
+  ElasticBeanstalkEnv:
+      Type: AWS::ElasticBeanstalk::Environment
+      Properties:
+        ApplicationName: !Ref ElasticBeanstalkApplication
+        Description: AWS Elastic Beanstalk Environment running re:Invent Retails web application 
+        EnvironmentName: reinvent-retails-env
+        VersionLabel: !Ref ElasticBeanstalkAppVersion
+        OptionSettings: 
+          - Namespace: 'aws:autoscaling:launchconfiguration'
+            OptionName: IamInstanceProfile
+            Value: !Ref EC2InstanceProfile
+          - Namespace: 'aws:autoscaling:launchconfiguration'
+            OptionName: SecurityGroups
+            Value: 
+              Fn::GetAtt:
+                - EC2SecurityGroup
+                - GroupId
+          - Namespace: 'aws:elasticbeanstalk:environment'
+            OptionName: ServiceRole
+            Value: !Ref ElasticBeanstalkServiceRole
+          - Namespace: 'aws:ec2:vpc'
+            OptionName: VPCId
+            Value: !Ref VPC
+          - Namespace: 'aws:ec2:vpc'
+            OptionName: Subnets
+            Value: !Join
+                      - ','
+                      - - !Ref PublicSubnetOne
+                        - !Ref PublicSubnetTwo
+                        - !Ref PublicSubnetThree
+                        - !Ref PublicSubnetFour
+          - Namespace: 'aws:ec2:instances'
+            OptionName: InstanceTypes
+            Value: !If [IsUSEast1, t2.small, t3.small]
+          - Namespace: 'aws:autoscaling:asg'
+            OptionName: MinSize
+            Value: 1
+          - Namespace: 'aws:autoscaling:asg'
+            OptionName: MaxSize
+            Value: 1
+          - Namespace: "aws:autoscaling:launchconfiguration"
+            OptionName: "EC2KeyName"
+            Value: 
+              !Ref KeyName
+          - Namespace: aws:elasticbeanstalk:application:environment
+            OptionName: AWS_DEFAULT_REGION
+            Value: !Sub ${AWS::Region}
+          - Namespace: aws:elasticbeanstalk:application:environment
+            OptionName: DJANGO_SETTINGS_MODULE
+            Value: retailstore.settings
+          - Namespace: aws:elasticbeanstalk:application:environment
+            OptionName: AWS_STORAGE_BUCKET_NAME
+            Value: !Ref S3Bucket
+        SolutionStackName: '64bit Amazon Linux 2023 v4.0.5 running Python 3.11'
+        Tier: 
+          Name: WebServer
+          Type: Standard
+
+  #### -------- NOTEBOOK --------- ####
+  NotebookInstance:
+    Type: AWS::SageMaker::NotebookInstance
+    Properties:
+      InstanceType: !If [IsUSEast1, ml.t2.large, ml.t3.large]
+      RoleArn: !GetAtt NotebookExecutionRole.Arn
+      SubnetId: !Ref PublicSubnetOne
+      SecurityGroupIds:
+        - !Ref NotebookSecurityGroup
+      DefaultCodeRepository: !Ref DefaultCodeRepository
+      VolumeSizeInGB: 5
+  
+  NotebookSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Notebook Instance Security Group
+      VpcId: !Ref VPC
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+  NotebookExecutionRole: 
+    Type: AWS::IAM::Role
+    Properties: 
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - 
+            Effect: "Allow"
+            Principal: 
+              Service: 
+                - "sagemaker.amazonaws.com"
+                - "translate.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+        - Fn::GetAtt:
+            - ApplicationAccessPolicy
+            - PolicyArn
+      Policies:
+        - 
+          PolicyName: "s3_access"
+          PolicyDocument: 
+            Version: "2012-10-17"
+            Statement: 
+              - 
+                Effect: "Allow"
+                Action: 
+                  - "s3:PutBucketPolicy"
+                  - "s3:DeleteBucket"
+                Resource: "arn:aws:s3:::sagemaker-*"
+
+Outputs:
+  ElasticBeanstalkEndpointURL:
+    Description: Elastic Beanstalk Application URL
+    Value:
+      Fn::GetAtt: ElasticBeanstalkEnv.EndpointURL
+
+  NotebookInstanceURL:
+    Description: SageMaker Notebook Instance URL
+    Value: !Join
+      - ''
+      - - !Sub 'https://console.aws.amazon.com/sagemaker/home?region=${AWS::Region}#/notebook-instances/openNotebook/'
+        - !GetAtt NotebookInstance.NotebookInstanceName
+        - '?view=classic'
