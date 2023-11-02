@@ -150,24 +150,6 @@ def submit_review(request, product_id):
                 messages.success(request, 'Thank you! Your review has been submitted.')
                 return redirect(url)
 
-
-def extract_strings_recursive(test_str, tag):
-    # finding the index of the first occurrence of the opening tag
-    start_idx = test_str.find("<" + tag + ">")
- 
-    # base case
-    if start_idx == -1:
-        return []
- 
-    # extracting the string between the opening and closing tags
-    end_idx = test_str.find("</" + tag + ">", start_idx)
-    res = [test_str[start_idx+len(tag)+2:end_idx]]
- 
-    # recursive call to extract strings after the current tag
-    res += extract_strings_recursive(test_str[end_idx+len(tag)+3:], tag)
- 
-    return res
-
 ####################### END SECTION - OTHER WEB APPLICATION FEATURES ##########################
 
 ####################### START SECTION - HANDLER FUNCTIONS GENAI FEATURES ##########################
@@ -343,6 +325,26 @@ def image_to_base64(img) -> str:
         return base64.b64encode(buffer.getvalue()).decode("utf-8")
     else:
         raise ValueError(f"Expected str (filename) or PIL Image. Got {type(img)}")
+
+#### HANDLER FUNCTIONS FOR QUESTION ANSWERING FEATURE ####
+
+# This function is used for extracting string within a tag. For example, get string embedded within <query></query>
+def extract_strings_recursive(test_str, tag):
+    # finding the index of the first occurrence of the opening tag
+    start_idx = test_str.find("<" + tag + ">")
+ 
+    # base case
+    if start_idx == -1:
+        return []
+ 
+    # extracting the string between the opening and closing tags
+    end_idx = test_str.find("</" + tag + ">", start_idx)
+    res = [test_str[start_idx+len(tag)+2:end_idx]]
+ 
+    # recursive call to extract strings after the current tag
+    res += extract_strings_recursive(test_str[end_idx+len(tag)+3:], tag)
+ 
+    return res
 
 ####################### END SECTION - HANDLER FUNCTIONS GENAI FEATURES ##########################
 
