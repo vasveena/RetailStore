@@ -291,12 +291,15 @@ Resources:
           - Effect: Allow
             Action:
               - 'bedrock:InvokeModel'
-              - 'bedrock:ListFoundationModels'
             Resource: 
               - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-instant-v1'
               - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-g1-text-02'
               - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-tg1-large'
               - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/stability.stable-diffusion-xl'
+          - Effect: Allow
+            Action:
+              - 'bedrock:ListFoundationModels'
+            Resource: "*"
           - Effect: Allow
             Action:
               - 'secretsmanager:GetSecretValue'
@@ -664,6 +667,10 @@ Resources:
       SubnetId: !Ref PublicSubnetOne
       SecurityGroupIds:
         - !Ref NotebookSecurityGroup
+        - Fn::GetAtt:
+              - EC2SecurityGroup
+              - GroupId
+        
       DefaultCodeRepository: !Ref DefaultCodeRepository
       VolumeSizeInGB: 5
   
@@ -696,7 +703,6 @@ Resources:
             Principal: 
               Service: 
                 - "sagemaker.amazonaws.com"
-                - "translate.amazonaws.com"
             Action: 
               - "sts:AssumeRole"
       Path: "/"
