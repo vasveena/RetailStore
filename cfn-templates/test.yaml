@@ -744,4 +744,3 @@ Outputs:
         - ''
         - - !Sub 'https://${AWS::Region}.console.aws.amazon.com/cloud9/ide/'
         - - !Ref Cloud9EC2Environment
-        - - !Sub '?region=${AWS::Region}#'
