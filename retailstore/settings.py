@@ -99,7 +99,7 @@ AUTH_USER_MODEL = 'accounts.Account'
 # Initialize secrets manager
 secrets = boto3.client('secretsmanager')
 response = secrets.get_secret_value(
-    SecretId='postgresdb-secret'
+    SecretId='postgresdb-secrets'
 )
 database_secrets = json.loads(response['SecretString'])
 
