@@ -490,7 +490,7 @@ def create_review_response(request, product_id, review_id):
         
         # Create a prompt template that has 4 input variables for product brand, color, category and description
         prompt_template = PromptTemplate(
-            input_variables=["product_name","customer_name","email","phone","length","review"], 
+            input_variables=["product_name","customer_name","manager_name","email","phone","length","review"], 
             template="""
                     Human: 
                     
