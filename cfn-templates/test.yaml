@@ -553,9 +553,7 @@ Resources:
                 wget https://reinvent-retail-store-artifacts.s3.amazonaws.com/data/config.yml
                 mkdir -p /home/ec2-user/RetailStore/.elasticbeanstalk/
                 sudo mv ./config.yml /home/ec2-user/RetailStore/.elasticbeanstalk/config.yml
-
-                sed -i "s|postgresdb-secret|postgresdb-secrets|g" /home/ec2-user/RetailStore/retailstore/settings.py
-                sed -i "s|postgresdb-secret|postgresdb-secrets|g" /home/ec2-user/RetailStore/store/views.py
+                
                 cd /home/ec2-user/RetailStore
                 zip /home/ec2-user/RetailStore.zip -r * .[^.]*
                 aws s3 cp /home/ec2-user/RetailStore.zip s3://${S3BucketName}/apparchive/ --acl bucket-owner-full-control
