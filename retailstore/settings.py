@@ -97,7 +97,7 @@ AUTH_USER_MODEL = 'accounts.Account'
 # https://docs.djangoproject.com/en/3.1/ref/settings/#databases
 
 # Initialize secrets manager
-secrets = boto3.client('secretsmanager')
+secrets = boto3.client('secretsmanager', region_name=config("AWS_DEFAULT_REGION"))
 response = secrets.get_secret_value(
     SecretId=config('AWS_DATABASE_SECRET_ID')
 )

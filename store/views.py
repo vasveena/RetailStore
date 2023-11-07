@@ -29,13 +29,13 @@ import psycopg2
 from pgvector.psycopg2 import register_vector
 
 # Initialize Bedrock client 
-boto3_bedrock = bedrock.get_bedrock_client(assumed_role=os.environ.get("BEDROCK_ASSUME_ROLE", None), region=os.environ.get("AWS_DEFAULT_REGION", None))
+boto3_bedrock = bedrock.get_bedrock_client(assumed_role=os.environ.get("BEDROCK_ASSUME_ROLE", None), region=config("AWS_DEFAULT_REGION"))
 
 # Initialize S3 client
-s3 = boto3.client('s3', region_name=os.environ.get("AWS_DEFAULT_REGION", None))
+s3 = boto3.client('s3', region_name=config("AWS_DEFAULT_REGION"))
 
 # Initialize secrets manager
-secrets = boto3.client('secretsmanager', region_name=os.environ.get("AWS_DEFAULT_REGION", None))
+secrets = boto3.client('secretsmanager', region_name=config("AWS_DEFAULT_REGION"))
 
 # Create your views here.
 
