@@ -577,7 +577,7 @@ def create_design_ideas(request, product_id):
                 product_gallery_del.delete()
                 request.session['image_flag'] = False
             # redirect to design studio
-            messages.info(request, "Deleted previously generated design idea")
+            messages.info(request, "Deleted previously generated design idea. You can now create a new design idea.")
             return redirect('design_studio', single_product.id)
         
         # IF user chose to delete all generated images from Stable Diffusion model
@@ -680,7 +680,7 @@ def create_design_ideas(request, product_id):
             request.session.modified = True
 
             # Signal success message to user
-            messages.success(request, "Design idea saved!")
+            messages.success(request, "Design idea generated. Scroll down to check it out!")
             
     except Exception as e: 
         raise e
