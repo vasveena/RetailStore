@@ -577,6 +577,7 @@ def create_design_ideas(request, product_id):
                 product_gallery_del.delete()
                 request.session['image_flag'] = False
             # redirect to design studio
+            messages.info(request, "Deleted previously generated design idea")
             return redirect('design_studio', single_product.id)
         
         # IF user chose to delete all generated images from Stable Diffusion model
@@ -591,6 +592,7 @@ def create_design_ideas(request, product_id):
                 # Delete product image gallery in Django DB
                 product_gallery_del.delete()
             # redirect to product page
+            messages.info(request, "Deleted all generated designs")
             return redirect('product_detail', single_product.category.slug, single_product.slug)
         
         # Generate new images using Bedrock
