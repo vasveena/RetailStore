@@ -202,8 +202,8 @@ def save_product_description(request, product_id):
         else:
             # do nothing
             pass
-    except:
-        pass
+    except Exception as e:
+        raise e
 
 #### HANDLER FUNCTIONS FOR DRAFTING RESPONSE TO CUSTOMER REVIEW FEATURE ####
 
@@ -250,8 +250,8 @@ def save_review_response(request, product_id, review_id):
         else:
             # do nothing
             pass
-    except:
-        pass
+    except Exception as e:
+        raise e
 
 #### HANDLER FUNCTIONS FOR SUMMARIZING CUSTOMER REVIEWS FEATURE ####
 
@@ -296,8 +296,8 @@ def save_summary(request, product_id):
         else:
             # do nothing
             pass
-    except:
-        pass
+    except Exception as e:
+        raise e
 
 #### HANDLER FUNCTIONS FOR CREATING NEW DESIGN IDEAS FEATURE ####
 
@@ -569,111 +569,119 @@ def create_design_ideas(request, product_id):
         # if user chose to delete previously generated image from Stable Diffusion model
         if 'delete_previous' in request.GET:
             # delete previously generated image  
-            print("delete image path: " +request.session['image_file_path'])
             product_gallery_del = ProductGallery.objects.filter(product=single_product, image=request.session['image_file_path'])
             if product_gallery_del:
+                # Delete previously generated image from S3
                 s3.delete_object(Bucket=bucket_name, Key=request.session['image_file_path'])
+                # Delete this image in product image gallery in Django DB
                 product_gallery_del.delete()
-                del request.session['image_flag']
-            return redirect('create_design_ideas', single_product.id)
+                request.session['image_flag'] = False
+            # redirect to design studio
+            return redirect('design_studio', single_product.id)
         
         # IF user chose to delete all generated images from Stable Diffusion model
         if 'delete_all' in request.GET:
             # delete existing image gallery 
-            del request.session['image_flag']
+            request.session['image_flag'] = False
             product_gallery_del = ProductGallery.objects.filter(product=single_product)
             if product_gallery_del:
+                 # Delete all generated images from S3
                 for x in product_gallery_del:
-                    key = x.image.url.split(".com/",1)[1]
-                    s3.delete_object(Bucket=bucket_name, Key=key)
+                    s3.delete_object(Bucket=bucket_name, Key="media/"+str(x.image))
+                # Delete product image gallery in Django DB
                 product_gallery_del.delete()
-            return redirect('create_design_ideas', single_product.id)
+            # redirect to product page
+            return redirect('product_detail', single_product.category.slug, single_product.slug)
         
-        # Open product image
-        image = Image.open(single_product.images)
-        # Resize product image to 512x512 for Stable Diffusion
-        resize = image.resize((512,512))
+        # Generate new images using Bedrock
+        else:
+            # Open product image
+            response = s3.get_object(Bucket=bucket_name, Key="media/"+str(single_product.images))
+            input_file_stream = response['Body']
+            image = Image.open(input_file_stream)
 
-        # Get inference parameters from web application form
+            # Resize product image to 512x512 for Stable Diffusion
+            resize = image.resize((512,512))
 
-        # This prompt is used to generate new ideas from the existing image
-        change_prompt = request.GET.get('change_prompt')
+            # This prompt is used to generate new ideas from the existing image
+            change_prompt = request.GET.get('change_prompt')
 
-        # Negative prompts that will be given -1.0 weight while generating new image
-        negprompts = request.GET.get('negative_prompt')
-        negative_prompts = []
-        for negprompt in negprompts.split('\n'):
-            negative_prompts.append(negprompt.replace('\r',''))
+            # Negative prompts that will be given -1.0 weight while generating new image
+            negprompts = request.GET.get('negative_prompt')
+            negative_prompts = []
+            if negprompts:
+                for negprompt in negprompts.split('\n'):
+                    negative_prompts.append(negprompt.replace('\r',''))
+            
+            # Other Stable Diffusion parameters
+            start_schedule = 0.5 if request.GET.get('start_schedule') is None else float(request.GET.get('start_schedule'))
+            steps = 30 if request.GET.get('steps') is None else int(request.GET.get('steps'))
+            cfg_scale = 10 if request.GET.get('cfg_scale') is None else int(request.GET.get('cfg_scale'))
+            image_strength = 0.5 if request.GET.get('image_strength') is None else float(request.GET.get('image_strength'))
+            denoising_strength = 0.5 if request.GET.get('denoising_strength') is None else float(request.GET.get('denoising_strength'))
+            seed = random.randint(1, 1000000) if request.GET.get('seed') is None else int(request.GET.get('seed'))
+            style_preset = "photographic" if request.GET.get('style_preset') is None else request.GET.get('style_preset')
+
+            # Convert image to base64 string
+            init_image_b64 = image_to_base64(resize)
+
+            # Construct request body for Stable Diffusion model
+            sd_request = json.dumps({
+                        "text_prompts": (
+                            [{"text": change_prompt, "weight": 1.0}]
+                            + [{"text": negprompt, "weight": -1.0} for negprompt in negative_prompts]
+                        ),
+                        "cfg_scale": cfg_scale,
+                        "init_image": init_image_b64,
+                        "seed": seed,
+                        "start_schedule": start_schedule,
+                        "steps": steps,
+                        "style_preset": style_preset,
+                        "image_strength":image_strength,
+                        "denoising_strength": denoising_strength
+                    })
+            
+            # Invoke Stable Diffusion model
+            response = boto3_bedrock.invoke_model(body=sd_request, modelId="stability.stable-diffusion-xl")
+
+            # Extract image from response body
+            response_body = json.loads(response.get("body").read())
+            genimage_b64_str = response_body["artifacts"][0].get("base64")
+            genimage = Image.open(io.BytesIO(base64.decodebytes(bytes(genimage_b64_str, "utf-8"))))
+            
+            # Save the image to an in-memory file
+            in_mem_file = io.BytesIO()
+            genimage.save(in_mem_file, format="PNG")
+            in_mem_file.seek(0)
+
+            # Upload image to static s3 path
+            image_file_path = single_product.slug + "_generated" + ''.join(random.choices(string.ascii_lowercase, k=5)) + ".png"
         
-        # Other Stable Diffusion parameters
-        start_schedule = float(request.GET.get('start_schedule')) or 0.5
-        steps = int(request.GET.get('steps')) or 30
-        cfg_scale = int(request.GET.get('cfg_scale')) or 10
-        image_strength = float(request.GET.get('image_strength')) or 0.5
-        denoising_strength = float(request.GET.get('denoising_strength')) or 0.5
-        seed = int(request.GET.get('seed')) or random.randint(1, 1000000)
-        style_preset = request.GET.get('style_preset') or "photographic"
+            s3.upload_fileobj(
+                in_mem_file, # image
+                bucket_name,
+                'media/store/products/' + image_file_path
+            )
 
-        # Convert image to base64 string
-        init_image_b64 = image_to_base64(resize)
+            # Save generated image to database
+            product_gallery = ProductGallery()
+            product_gallery.product = single_product
+            product_gallery.image = 'store/products/' + image_file_path
+            product_gallery.save()
 
-        # Construct request body for Stable Diffusion model
-        sd_request = json.dumps({
-                    "text_prompts": (
-                        [{"text": change_prompt, "weight": 1.0}]
-                        + [{"text": negprompt, "weight": -1.0} for negprompt in negative_prompts]
-                    ),
-                    "cfg_scale": cfg_scale,
-                    "init_image": init_image_b64,
-                    "seed": seed,
-                    "start_schedule": start_schedule,
-                    "steps": steps,
-                    "style_preset": style_preset,
-                    "image_strength":image_strength,
-                    "denoising_strength": denoising_strength
-                })
-        
-        # Invoke Stable Diffusion model
-        response = boto3_bedrock.invoke_model(body=sd_request, modelId="stability.stable-diffusion-xl")
+            # Set session parameters to use in HTML template
+            request.session['change_prompt'] = change_prompt
+            request.session['negative_prompt'] = negprompts
+            request.session['image_file_path'] = 'store/products/' + image_file_path
+            request.session['image_flag'] = True
+            request.session['image_url'] = product_gallery.image.url
+            request.session.modified = True
 
-        # Extract image from response body
-        response_body = json.loads(response.get("body").read())
-        genimage_b64_str = response_body["artifacts"][0].get("base64")
-        genimage = Image.open(io.BytesIO(base64.decodebytes(bytes(genimage_b64_str, "utf-8"))))
-        
-        # Save the image to an in-memory file
-        in_mem_file = io.BytesIO()
-        genimage.save(in_mem_file, format="PNG")
-        in_mem_file.seek(0)
-
-        # Upload image to static s3 path
-        image_file_path = single_product.slug + "_generated" + ''.join(random.choices(string.ascii_lowercase, k=5)) + ".png"
-    
-        s3.upload_fileobj(
-            in_mem_file, # image
-            bucket_name,
-            'media/store/products/' + image_file_path
-        )
-
-        # Save generated image to database
-        product_gallery = ProductGallery()
-        product_gallery.product = single_product
-        product_gallery.image = 'store/products/' + image_file_path
-        product_gallery.save()
-
-        # Set session parameters to use in HTML template
-        request.session['change_prompt'] = change_prompt
-        request.session['negative_prompt'] = negprompts
-        request.session['image_file_path'] = 'store/products/' + image_file_path
-        request.session['image_flag'] = True
-        request.session['image_url'] = product_gallery.image.url
-        request.session.modified = True
-
-        # Signal success message to user
-        messages.success(request, "Design idea saved!")
+            # Signal success message to user
+            messages.success(request, "Design idea saved!")
             
     except Exception as e: 
-        print(e)
+        raise e
         
     # redirect to the previous URL (i.e., studio.html).
     return redirect(url)
@@ -765,8 +773,8 @@ def generate_review_summary(request, product_id):
         request.session['summary_flag'] = True
         request.session.modified = True
 
-    except: 
-        pass
+    except Exception as e: 
+        raise e
 
     # redirect to the previous URL (i.e., generate_summary.html).
     return redirect(url)
@@ -910,8 +918,8 @@ def ask_question(request):
                 if len(describe_query_result) == 0:
                     describe_query_result = "Sorry, I could not answer that question."
 
-        except:
-            query = "Sorry, I could not answer that question."
+        except Exception as e:
+            query = "Following exception was received. Please try again.\n\n" + str(e)
 
         # Set context variables for HTML template
         context = {
