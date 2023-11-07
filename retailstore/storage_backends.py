@@ -1,13 +1,12 @@
 from storages.backends.s3boto3 import S3Boto3Storage
 from decouple import config
-import os
 
 class StaticStorage(S3Boto3Storage):
 
     def __init__(self, *args, **kwargs):
         kwargs['custom_domain'] = config('AWS_CLOUDFRONT_DOMAIN')  
         kwargs['signature_version'] = "s3v4"
-        kwargs['region_name'] = os.environ.get("AWS_DEFAULT_REGION", None)
+        kwargs['region_name'] = config('AWS_DEFAULT_REGION')
         kwargs['default_acl'] = "public-read"
         kwargs['location'] = "static"
         
