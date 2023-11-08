@@ -12,7 +12,7 @@ Parameters:
     Type: String
 
   WorkshopAssetsURL:
-    Default: 'https://reinvent-retail-store-artifacts.s3.amazonaws.com/'
+    Default: 'https://reinvent-retail-store-artifacts.s3.amazonaws.com'
     Type: String
 
 Conditions:
@@ -317,6 +317,7 @@ Resources:
               - 's3:PutObjectAcl'
               - 's3:List*'
               - 's3:AbortMultipartUpload'
+              - 's3:DeleteObject'
             Resource: 
               - Fn::Join:
                 - ''
