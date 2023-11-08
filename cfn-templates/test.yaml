@@ -8,7 +8,11 @@ Parameters:
     ConstraintDescription: Can contain only ASCII characters.
 
   DefaultCodeRepository:
-    Default: 'https://github.com/vasveena/RetailStore.git'
+    Default: 'https://github.com/aws-samples/retails-generative-ai-workshop.git'
+    Type: String
+
+  DefaultRepoName: 
+    Default: retails-generative-ai-workshop
     Type: String
 
   WorkshopAssetsURL:
@@ -603,28 +607,31 @@ Resources:
 
                 # Create S3 Zip archive for Elastic beanstalk application
                 cd /home/ec2-user/
-                git clone ${CodeRepository} -b root --single-branch
+
+                # Clone git repo
+                git clone ${CodeRepository}
 
                 python3 -m pip install django
                 secretname=$(python3 -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())')
 
-                echo "SECRET_KEY=$secretname" >> /home/ec2-user/RetailStore/.env
-                echo "AWS_STORAGE_BUCKET_NAME=${S3BucketName}" >> /home/ec2-user/RetailStore/.env
+                echo "SECRET_KEY=$secretname" >> /home/ec2-user/${RepoName}/.env
+                echo "AWS_STORAGE_BUCKET_NAME=${S3BucketName}" >> /home/ec2-user/${RepoName}/.env
 
-                cd /home/ec2-user/RetailStore
-                zip /home/ec2-user/RetailStore.zip -r * .[^.]*
-                aws s3 cp /home/ec2-user/RetailStore.zip s3://${S3BucketName}/apparchive/
+                cd /home/ec2-user/${RepoName}
+                zip /home/ec2-user/${RepoName}.zip -r * .[^.]*
+                aws s3 cp /home/ec2-user/${RepoName}.zip s3://${S3BucketName}/apparchive/
                 aws s3 cp /home/ec2-user/data/media/ s3://${S3BucketName}/media/ --recursive 
                 aws s3 cp /home/ec2-user/data/static/ s3://${S3BucketName}/static/ --recursive 
                 aws s3 cp /home/ec2-user/data/data/ s3://${S3BucketName}/data/ --recursive 
-                aws s3 cp /home/ec2-user/RetailStore/.env s3://${S3BucketName}/environment/env 
+                aws s3 cp /home/ec2-user/${RepoName}/.env s3://${S3BucketName}/environment/env 
 
-                sudo chown -R ec2-user:ec2-user /home/ec2-user/RetailStore/
+                sudo chown -R ec2-user:ec2-user /home/ec2-user/${RepoName}/
 
                 #Signal done to CloudFormation
                 /opt/aws/bin/cfn-signal -e $? -d "User Data" -r "Build Process Complete" '${PrivateWaitHandle}'
             -  S3BucketName: !Ref S3Bucket
                CodeRepository: !Ref DefaultCodeRepository
+               RepoName: !Ref DefaultRepoName
                AssetsURL: !Ref WorkshopAssetsURL
 
   PrivateWaitHandle:
@@ -656,7 +663,7 @@ Resources:
       Description: Version 1.0
       SourceBundle:
         S3Bucket: !Ref S3Bucket
-        S3Key: apparchive/RetailStore.zip
+        S3Key: !Sub 'apparchive/${RepoName}.zip'
 
   ElasticBeanstalkEnv:
       Type: AWS::ElasticBeanstalk::Environment
