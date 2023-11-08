@@ -302,6 +302,7 @@ Resources:
             Resource: 
               - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-instant-v1'
               - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-g1-text-02'
+              - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-embed-text-v1'
               - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.titan-tg1-large'
               - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/stability.stable-diffusion-xl'
           - Effect: Allow
