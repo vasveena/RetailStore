@@ -943,7 +943,7 @@ def vector_search(request):
         keyword = request.GET['keyword']
         if keyword:
             # Initialize Titan embeddings model
-            bedrock_embeddings = BedrockEmbeddings(model_id="amazon.titan-embed-g1-text-02", client=boto3_bedrock)
+            bedrock_embeddings = BedrockEmbeddings(model_id="amazon.titan-embed-text-v1", client=boto3_bedrock)
 
             # Generate vector embeddings for the search keyword
             search_embedding = list(bedrock_embeddings.embed_query(keyword))
