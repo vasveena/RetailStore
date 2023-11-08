@@ -663,7 +663,7 @@ Resources:
       Description: Version 1.0
       SourceBundle:
         S3Bucket: !Ref S3Bucket
-        S3Key: !Sub 'apparchive/${RepoName}.zip'
+        S3Key: !Sub 'apparchive/${DefaultRepoName}.zip'
 
   ElasticBeanstalkEnv:
       Type: AWS::ElasticBeanstalk::Environment
