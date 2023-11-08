@@ -12,7 +12,7 @@ Parameters:
     Type: String
 
   WorkshopAssetsURL:
-    Default: 'https://ws-assets-prod-iad-r-iad-ed304a55c2ca1aee.s3.us-east-1.amazonaws.com/6d7bb71e-9354-4109-8550-6a0d0901dcfe'
+    Default: 'https://reinvent-retail-store-artifacts.s3.amazonaws.com/'
     Type: String
 
 Conditions:
@@ -460,6 +460,10 @@ Resources:
         DefaultCacheBehavior:
           TargetOriginId: static-hosting
           ViewerProtocolPolicy: redirect-to-https
+          ForwardedValues:
+            QueryString: "false"
+            Cookies:
+              Forward: none
           AllowedMethods:
             - DELETE
             - GET
@@ -468,6 +472,24 @@ Resources:
             - PATCH
             - POST
             - PUT
+
+  S3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3Bucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - 's3:GetObject'
+              - 's3:PutObject'
+            Effect: Allow
+            Resource: !Sub "${S3Bucket.Arn}/*"
+            Principal:
+                Service: 'cloudfront.amazonaws.com'
+            Condition: 
+              StringEquals: 
+                  'AWS:SourceArn': !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontS3Distribution.Id}'                                
 
   #### -------- RDS POSTGRES DATABASE --------- ####
 
@@ -618,7 +640,9 @@ Resources:
   #### -------- ELASTIC BEANSTALK --------- ####
 
   ElasticBeanstalkApplication:
-      DependsOn: PrivateWaitCondition
+      DependsOn: 
+        - PrivateWaitCondition
+        - S3BucketPolicy
       Type: AWS::ElasticBeanstalk::Application
       Properties:
         ApplicationName: reinvent-retails-application
