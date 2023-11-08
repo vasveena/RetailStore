@@ -8,7 +8,11 @@ Parameters:
     ConstraintDescription: Can contain only ASCII characters.
 
   DefaultCodeRepository:
-    Default: https://github.com/vasveena/RetailStore.git
+    Default: 'https://github.com/vasveena/RetailStore.git'
+    Type: String
+
+  WorkshopAssetsURL:
+    Default: 'https://ws-assets-prod-iad-r-iad-ed304a55c2ca1aee.s3.us-east-1.amazonaws.com/6d7bb71e-9354-4109-8550-6a0d0901dcfe'
     Type: String
 
 Conditions:
@@ -57,7 +61,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
-          CidrIp: 0.0.0.0/0
+          CidrIp: !GetAtt VPC.CidrBlock
 
   EC2SecurityGroupIngressRule:
     Type: AWS::EC2::SecurityGroupIngress
@@ -407,8 +411,11 @@ Resources:
       Roles:
         - !Ref EC2Role
 
+#### -------- S3 BUCKET AND CLOUDFRONT TO HOST STATIC FILES --------- ####
+
   S3Bucket:
     Type: 'AWS::S3::Bucket'
+    DeletionPolicy: Retain
     Properties:
       BucketName: !Join 
         - '-'
@@ -424,12 +431,43 @@ Resources:
                 - !Split 
                   - /
                   - !Ref "AWS::StackId"
-      PublicAccessBlockConfiguration:
-                BlockPublicAcls: false
-                IgnorePublicAcls: false
-      OwnershipControls:
-                Rules:
-                  - ObjectOwnership: BucketOwnerPreferred
+
+  CloudFrontOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: static-hosting-OAC
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  CloudFrontS3Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Origins:
+          - DomainName: !Join
+                        - '.'
+                        - - !Ref S3Bucket
+                          - 's3'
+                          - !Ref AWS::Region
+                          - 'amazonaws.com'
+            Id: static-hosting
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+            OriginAccessControlId: !GetAtt CloudFrontOriginAccessControl.Id
+        Enabled: true
+        DefaultCacheBehavior:
+          TargetOriginId: static-hosting
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - DELETE
+            - GET
+            - HEAD
+            - OPTIONS
+            - PATCH
+            - POST
+            - PUT
 
   #### -------- RDS POSTGRES DATABASE --------- ####
 
@@ -525,7 +563,7 @@ Resources:
                 # Download static files
                 sudo su ec2-user 
                 cd /home/ec2-user
-                wget https://reinvent-retail-store-artifacts.s3.amazonaws.com/zips/data.zip
+                wget ${AssetsURL}/zips/data.zip
                 unzip data.zip
 
                 # Load static data into DB
@@ -550,17 +588,13 @@ Resources:
                 echo "SECRET_KEY=$secretname" >> /home/ec2-user/RetailStore/.env
                 echo "AWS_STORAGE_BUCKET_NAME=${S3BucketName}" >> /home/ec2-user/RetailStore/.env
 
-                wget https://reinvent-retail-store-artifacts.s3.amazonaws.com/data/config.yml
-                mkdir -p /home/ec2-user/RetailStore/.elasticbeanstalk/
-                sudo mv ./config.yml /home/ec2-user/RetailStore/.elasticbeanstalk/config.yml
-
                 cd /home/ec2-user/RetailStore
                 zip /home/ec2-user/RetailStore.zip -r * .[^.]*
-                aws s3 cp /home/ec2-user/RetailStore.zip s3://${S3BucketName}/apparchive/ --acl bucket-owner-full-control
-                aws s3 cp /home/ec2-user/data/media/ s3://${S3BucketName}/media/ --acl public-read --recursive 
-                aws s3 cp /home/ec2-user/data/static/ s3://${S3BucketName}/static/ --acl public-read --recursive 
-                aws s3 cp /home/ec2-user/data/data/ s3://${S3BucketName}/data/ --acl bucket-owner-full-control --recursive 
-                aws s3 cp /home/ec2-user/RetailStore/.env s3://${S3BucketName}/environment/env --acl bucket-owner-full-control
+                aws s3 cp /home/ec2-user/RetailStore.zip s3://${S3BucketName}/apparchive/
+                aws s3 cp /home/ec2-user/data/media/ s3://${S3BucketName}/media/ --recursive 
+                aws s3 cp /home/ec2-user/data/static/ s3://${S3BucketName}/static/ --recursive 
+                aws s3 cp /home/ec2-user/data/data/ s3://${S3BucketName}/data/ --recursive 
+                aws s3 cp /home/ec2-user/RetailStore/.env s3://${S3BucketName}/environment/env 
 
                 sudo chown -R ec2-user:ec2-user /home/ec2-user/RetailStore/
 
@@ -568,6 +602,7 @@ Resources:
                 /opt/aws/bin/cfn-signal -e $? -d "User Data" -r "Build Process Complete" '${PrivateWaitHandle}'
             -  S3BucketName: !Ref S3Bucket
                CodeRepository: !Ref DefaultCodeRepository
+               AssetsURL: !Ref WorkshopAssetsURL
 
   PrivateWaitHandle:
       Type: AWS::CloudFormation::WaitConditionHandle
@@ -651,6 +686,13 @@ Resources:
           - Namespace: aws:elasticbeanstalk:application:environment
             OptionName: AWS_STORAGE_BUCKET_NAME
             Value: !Ref S3Bucket
+          - Namespace: aws:elasticbeanstalk:application:environment
+            OptionName: AWS_DATABASE_SECRET_ID
+            Value: !GetAtt RDSPostgresDBSecret.Id
+          - Namespace: aws:elasticbeanstalk:application:environment
+            OptionName: AWS_CLOUDFRONT_DOMAIN
+            Value: !GetAtt CloudFrontS3Distribution.DomainName
+        
         SolutionStackName: '64bit Amazon Linux 2023 v4.0.5 running Python 3.11'
         Tier: 
           Name: WebServer
@@ -664,31 +706,12 @@ Resources:
       RoleArn: !GetAtt NotebookExecutionRole.Arn
       SubnetId: !Ref PublicSubnetOne
       SecurityGroupIds:
-        - !Ref NotebookSecurityGroup
         - Fn::GetAtt:
               - EC2SecurityGroup
               - GroupId
         
       DefaultCodeRepository: !Ref DefaultCodeRepository
       VolumeSizeInGB: 5
-  
-  NotebookSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Notebook Instance Security Group
-      VpcId: !Ref VPC
-      SecurityGroupEgress:
-        - IpProtocol: "-1"
-          CidrIp: 0.0.0.0/0
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 5432
-          ToPort: 5432
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: 0.0.0.0/0
 
   NotebookExecutionRole: 
     Type: AWS::IAM::Role
