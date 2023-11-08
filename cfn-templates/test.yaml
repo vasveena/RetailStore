@@ -8,7 +8,15 @@ Parameters:
     ConstraintDescription: Can contain only ASCII characters.
 
   DefaultCodeRepository:
-    Default: https://github.com/vasveena/RetailStore.git
+    Default: 'https://github.com/vasveena/RetailStore.git'
+    Type: String
+
+  DefaultRepoName: 
+    Default: RetailStore
+    Type: String
+
+  WorkshopAssetsURL:
+    Default: 'https://reinvent-retail-store-artifacts.s3.amazonaws.com'
     Type: String
 
 Conditions:
@@ -57,7 +65,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
-          CidrIp: 0.0.0.0/0
+          CidrIp: !GetAtt VPC.CidrBlock
 
   EC2SecurityGroupIngressRule:
     Type: AWS::EC2::SecurityGroupIngress
@@ -313,6 +321,7 @@ Resources:
               - 's3:PutObjectAcl'
               - 's3:List*'
               - 's3:AbortMultipartUpload'
+              - 's3:DeleteObject'
             Resource: 
               - Fn::Join:
                 - ''
@@ -407,8 +416,11 @@ Resources:
       Roles:
         - !Ref EC2Role
 
+#### -------- S3 BUCKET AND CLOUDFRONT TO HOST STATIC FILES --------- ####
+
   S3Bucket:
     Type: 'AWS::S3::Bucket'
+    DeletionPolicy: Retain
     Properties:
       BucketName: !Join 
         - '-'
@@ -424,12 +436,65 @@ Resources:
                 - !Split 
                   - /
                   - !Ref "AWS::StackId"
-      PublicAccessBlockConfiguration:
-                BlockPublicAcls: false
-                IgnorePublicAcls: false
-      OwnershipControls:
-                Rules:
-                  - ObjectOwnership: BucketOwnerPreferred
+
+  CloudFrontOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: static-hosting-OAC
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  CloudFrontS3Distribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Origins:
+          - DomainName: !Join
+                        - '.'
+                        - - !Ref S3Bucket
+                          - 's3'
+                          - !Ref AWS::Region
+                          - 'amazonaws.com'
+            Id: static-hosting
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+            OriginAccessControlId: !GetAtt CloudFrontOriginAccessControl.Id
+        Enabled: true
+        DefaultCacheBehavior:
+          TargetOriginId: static-hosting
+          ViewerProtocolPolicy: redirect-to-https
+          ForwardedValues:
+            QueryString: "false"
+            Cookies:
+              Forward: none
+          AllowedMethods:
+            - DELETE
+            - GET
+            - HEAD
+            - OPTIONS
+            - PATCH
+            - POST
+            - PUT
+
+  S3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3Bucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - 's3:GetObject'
+              - 's3:PutObject'
+            Effect: Allow
+            Resource: !Sub "${S3Bucket.Arn}/*"
+            Principal:
+                Service: 'cloudfront.amazonaws.com'
+            Condition: 
+              StringEquals: 
+                  'AWS:SourceArn': !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontS3Distribution.Id}'                                
 
   #### -------- RDS POSTGRES DATABASE --------- ####
 
@@ -525,7 +590,7 @@ Resources:
                 # Download static files
                 sudo su ec2-user 
                 cd /home/ec2-user
-                wget https://reinvent-retail-store-artifacts.s3.amazonaws.com/zips/data.zip
+                wget ${AssetsURL}/zips/data.zip
                 unzip data.zip
 
                 # Load static data into DB
@@ -547,27 +612,25 @@ Resources:
                 python3 -m pip install django
                 secretname=$(python3 -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())')
 
-                echo "SECRET_KEY=$secretname" >> /home/ec2-user/RetailStore/.env
-                echo "AWS_STORAGE_BUCKET_NAME=${S3BucketName}" >> /home/ec2-user/RetailStore/.env
+                echo "SECRET_KEY=$secretname" >> /home/ec2-user/${RepoName}/.env
+                echo "AWS_STORAGE_BUCKET_NAME=${S3BucketName}" >> /home/ec2-user/${RepoName}/.env
 
-                wget https://reinvent-retail-store-artifacts.s3.amazonaws.com/data/config.yml
-                mkdir -p /home/ec2-user/RetailStore/.elasticbeanstalk/
-                sudo mv ./config.yml /home/ec2-user/RetailStore/.elasticbeanstalk/config.yml
-                
-                cd /home/ec2-user/RetailStore
-                zip /home/ec2-user/RetailStore.zip -r * .[^.]*
-                aws s3 cp /home/ec2-user/RetailStore.zip s3://${S3BucketName}/apparchive/ --acl bucket-owner-full-control
-                aws s3 cp /home/ec2-user/data/media/ s3://${S3BucketName}/media/ --acl public-read --recursive 
-                aws s3 cp /home/ec2-user/data/static/ s3://${S3BucketName}/static/ --acl public-read --recursive 
-                aws s3 cp /home/ec2-user/data/data/ s3://${S3BucketName}/data/ --acl bucket-owner-full-control --recursive 
-                aws s3 cp /home/ec2-user/RetailStore/.env s3://${S3BucketName}/environment/env --acl bucket-owner-full-control
+                cd /home/ec2-user/${RepoName}
+                zip /home/ec2-user/${RepoName}.zip -r * .[^.]*
+                aws s3 cp /home/ec2-user/${RepoName}.zip s3://${S3BucketName}/apparchive/
+                aws s3 cp /home/ec2-user/data/media/ s3://${S3BucketName}/media/ --recursive 
+                aws s3 cp /home/ec2-user/data/static/ s3://${S3BucketName}/static/ --recursive 
+                aws s3 cp /home/ec2-user/data/data/ s3://${S3BucketName}/data/ --recursive 
+                aws s3 cp /home/ec2-user/${RepoName}/.env s3://${S3BucketName}/environment/env 
 
-                sudo chown -R ec2-user:ec2-user /home/ec2-user/RetailStore/
+                sudo chown -R ec2-user:ec2-user /home/ec2-user/${RepoName}/
 
                 #Signal done to CloudFormation
                 /opt/aws/bin/cfn-signal -e $? -d "User Data" -r "Build Process Complete" '${PrivateWaitHandle}'
             -  S3BucketName: !Ref S3Bucket
                CodeRepository: !Ref DefaultCodeRepository
+               RepoName: !Ref DefaultRepoName
+               AssetsURL: !Ref WorkshopAssetsURL
 
   PrivateWaitHandle:
       Type: AWS::CloudFormation::WaitConditionHandle
@@ -583,7 +646,9 @@ Resources:
   #### -------- ELASTIC BEANSTALK --------- ####
 
   ElasticBeanstalkApplication:
-      DependsOn: PrivateWaitCondition
+      DependsOn: 
+        - PrivateWaitCondition
+        - S3BucketPolicy
       Type: AWS::ElasticBeanstalk::Application
       Properties:
         ApplicationName: reinvent-retails-application
@@ -596,7 +661,7 @@ Resources:
       Description: Version 1.0
       SourceBundle:
         S3Bucket: !Ref S3Bucket
-        S3Key: apparchive/RetailStore.zip
+        S3Key: !Sub 'apparchive/${RepoName}.zip'
 
   ElasticBeanstalkEnv:
       Type: AWS::ElasticBeanstalk::Environment
@@ -651,6 +716,13 @@ Resources:
           - Namespace: aws:elasticbeanstalk:application:environment
             OptionName: AWS_STORAGE_BUCKET_NAME
             Value: !Ref S3Bucket
+          - Namespace: aws:elasticbeanstalk:application:environment
+            OptionName: AWS_DATABASE_SECRET_ID
+            Value: !GetAtt RDSPostgresDBSecret.Id
+          - Namespace: aws:elasticbeanstalk:application:environment
+            OptionName: AWS_CLOUDFRONT_DOMAIN
+            Value: !GetAtt CloudFrontS3Distribution.DomainName
+        
         SolutionStackName: '64bit Amazon Linux 2023 v4.0.5 running Python 3.11'
         Tier: 
           Name: WebServer
@@ -664,31 +736,12 @@ Resources:
       RoleArn: !GetAtt NotebookExecutionRole.Arn
       SubnetId: !Ref PublicSubnetOne
       SecurityGroupIds:
-        - !Ref NotebookSecurityGroup
         - Fn::GetAtt:
               - EC2SecurityGroup
               - GroupId
         
       DefaultCodeRepository: !Ref DefaultCodeRepository
       VolumeSizeInGB: 5
-  
-  NotebookSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Notebook Instance Security Group
-      VpcId: !Ref VPC
-      SecurityGroupEgress:
-        - IpProtocol: "-1"
-          CidrIp: 0.0.0.0/0
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 5432
-          ToPort: 5432
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: 0.0.0.0/0
 
   NotebookExecutionRole: 
     Type: AWS::IAM::Role
