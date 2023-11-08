@@ -19,6 +19,10 @@ Parameters:
     Default: 'https://reinvent-retail-store-artifacts.s3.amazonaws.com'
     Type: String
 
+  DbSecretsName:
+    Default: 'postgresdb-secrets'
+    Type: String
+
 Conditions:
   IsUSEast1: !Equals [ !Ref "AWS::Region", us-east-1 ]
 
@@ -503,7 +507,7 @@ Resources:
     Type: AWS::SecretsManager::Secret
     Properties:
       Description: This is a Secrets Manager secret for RDS Postgres DB cluster
-      Name: postgresdb-secrets
+      Name: !Ref DbSecretsName
       GenerateSecretString:
         SecretStringTemplate: '{"username": "retailsdbuser","name":"ebdb","vectorDbIdentifier":"vectordb","port":"5432"}'
         GenerateStringKey: password
@@ -595,7 +599,7 @@ Resources:
                 unzip data.zip
 
                 # Load static data into DB
-                secrets=$(aws secretsmanager get-secret-value --secret-id postgresdb-secrets --query SecretString --output text --region ${AWS::Region})
+                secrets=$(aws secretsmanager get-secret-value --secret-id ${SecretsName} --query SecretString --output text --region ${AWS::Region})
                 host=$(echo $secrets | jq .host | sed 's|\"||g')
                 username=$(echo $secrets | jq .username | sed 's|\"||g')
                 password=$(echo $secrets | jq .password | sed 's|\"||g')
@@ -634,6 +638,7 @@ Resources:
                CodeRepository: !Ref DefaultCodeRepository
                RepoName: !Ref DefaultRepoName
                AssetsURL: !Ref WorkshopAssetsURL
+               SecretsName: !Ref DbSecretsName
 
   PrivateWaitHandle:
       Type: AWS::CloudFormation::WaitConditionHandle
@@ -721,7 +726,7 @@ Resources:
             Value: !Ref S3Bucket
           - Namespace: aws:elasticbeanstalk:application:environment
             OptionName: AWS_DATABASE_SECRET_ID
-            Value: !GetAtt RDSPostgresDBSecret.Id
+            Value: !Ref DbSecretsName
           - Namespace: aws:elasticbeanstalk:application:environment
             OptionName: AWS_CLOUDFRONT_DOMAIN
             Value: !GetAtt CloudFrontS3Distribution.DomainName
