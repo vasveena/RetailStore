@@ -2,10 +2,20 @@ AWSTemplateFormatVersion: 2010-09-09
 
 Parameters:
   KeyName:
-    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+    Description: Name of an existing EC2 Key Pair in your account and region
     Type: 'AWS::EC2::KeyPair::KeyName'
-    Default: "ws-default-keypair"
-    ConstraintDescription: Can contain only ASCII characters.
+    AllowedPattern : ".+"
+    MinLength: 1
+    ConstraintDescription: KeyName should be non-empty
+
+  ShouldCreateCloud9AccessRole: 
+    Description: Set to true if the IAM role "AWSCloud9SSMAccessRole" does not exist in your AWS account
+    Default: 'false'
+    AllowedValues: [
+        "true",
+        "false"
+      ]
+    Type: String
 
   DefaultCodeRepository:
     Default: 'https://github.com/aws-samples/retails-generative-ai-workshop.git'
@@ -25,6 +35,7 @@ Parameters:
 
 Conditions:
   IsUSEast1: !Equals [ !Ref "AWS::Region", us-east-1 ]
+  CreateCloud9SSMRole: !Equals [ !Ref ShouldCreateCloud9AccessRole, true ]
 
 Mappings:
   SubnetConfig:
@@ -352,6 +363,35 @@ Resources:
               - 'elasticbeanstalk:RestartAppServer'
             Resource: 
               - '*'
+
+  AWSCloud9SSMAccessRole:
+    Type: AWS::IAM::Role
+    Condition: CreateCloud9SSMRole
+    Properties: 
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - cloud9.amazonaws.com
+              - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Description: 'Service linked role for AWS Cloud9'
+      Path: '/service-role/'
+      RoleName: AWSCloud9SSMAccessRole
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/AWSCloud9SSMInstanceProfile
+
+  AWSCloud9SSMInstanceProfile:
+    Condition: CreateCloud9SSMRole
+    Type: "AWS::IAM::InstanceProfile"
+    Properties: 
+      InstanceProfileName: AWSCloud9SSMInstanceProfile
+      Path: "/cloud9/"
+      Roles: 
+        - !Ref AWSCloud9SSMAccessRole
 
   ElasticBeanstalkServiceRole:
     Type: 'AWS::IAM::Role'
