@@ -350,8 +350,8 @@ def extract_strings_recursive(test_str, tag):
 
 ####################### START SECTION - IMPLEMENT GENAI FEATURES FOR WORKSHOP ##########################
 
-#### This is the only section in store/views.py where you will add functions needed for implementing GenAI features into your retail application
-#### Please don't edit any sections other than this one in THIS file. 
+#### This is the ONLY section in store/views.py where you will add functions needed for implementing GenAI features into your retail application
+#### Please don't edit any other sections in THIS file.
 
 #### FEATURE 1 - GENERATE PRODUCT DESCRIPTION ####
 
