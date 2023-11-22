@@ -695,19 +695,19 @@ def create_design_ideas(request, product_id):
 
 # This function is used for summarizing customer reviews using LLM from Bedrock
 def generate_review_summary(request, product_id):
-    # get current URL for redirecting
+    # Get current URL for redirecting
     url = request.META.get('HTTP_REFERER')
-    # get product from product ID
+    # Get product from product ID
     single_product = Product.objects.get(id=product_id)
-    # get all customer reviews for this product
+    # Get all customer reviews for this product
     product_reviews = ReviewRating.objects.filter(product=single_product)
 
     chunk_size = int(request.GET.get('chunk_size') or 4000)
     chunk_overlap = int(request.GET.get('chunk_overlap') or 100)
 
-    # get a list of customer reviews for this product and enclose them in <review></review> tags
-    # this will be used in the prompt template for summarizing customer reviews
-    # doing it this way helps LLM understand our instruction better
+    # Get a list of customer reviews for this product and enclose them in <review></review> tags
+    # This will be used in the prompt template for summarizing customer reviews
+    # Doing it this way helps LLM understand our instruction better
     review_digest = ''
 
     for review in product_reviews:
@@ -715,11 +715,12 @@ def generate_review_summary(request, product_id):
         review_digest += review.review + '\n'
         review_digest += "</review>" + '\n\n'
 
+    # Let's split our reviews into chunks using Langchain's RecursiveCharacterTextSplitter
+    # chunk size and overlap are defined as input parameters
     from langchain.text_splitter import RecursiveCharacterTextSplitter
     text_splitter = RecursiveCharacterTextSplitter(
         separators=["\n\n", "\n"], chunk_size=chunk_size, chunk_overlap=chunk_overlap
     )
-
     customer_reviews = text_splitter.create_documents([review_digest])
 
     try:
@@ -795,7 +796,7 @@ def generate_review_summary(request, product_id):
             
         '''
         
-        # Pass in values to the prompt template
+        # Create prompt template with two input variables - product name and text i.e, customer reviews for this product
         summary_prompt_template = PromptTemplate(
             template=summary_prompt, 
             input_variables=['product_name','text']
@@ -803,7 +804,8 @@ def generate_review_summary(request, product_id):
 
         summary_prompt_string = summary_prompt_template.format(product_name=single_product.product_name, text=customer_reviews)
 
-        # Set verbose=True if you want to see the prompts being used
+        # Use Langchain's load_summarize_chain to summarize the product reviews
+        # Chain type "stuff" takes the list of customer reviews, inserts them all into a prompt and passes that prompt to an LLM.
         from langchain.chains.summarize import load_summarize_chain
 
         summary_chain = load_summarize_chain (
@@ -813,7 +815,7 @@ def generate_review_summary(request, product_id):
             verbose=False
         )
 
-        # Generate review summary using prompt constructed above
+        # Pass in the input variables to the prompt template and invoke the summary chain using Bedrock LLM 
         summary=summary_chain.run({
                 "product_name": single_product.product_name,
                 "input_documents": customer_reviews
