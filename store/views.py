@@ -351,7 +351,7 @@ def extract_strings_recursive(test_str, tag):
 ####################### START SECTION - IMPLEMENT GENAI FEATURES FOR WORKSHOP ##########################
 
 #### This is the ONLY section in store/views.py where you will add functions needed for implementing GenAI features into your retail application
-#### Please don't edit any other sections in THIS file.
+#### Please don't edit any other sections in THIS file. 
 
 #### FEATURE 1 - GENERATE PRODUCT DESCRIPTION ####
 
@@ -715,7 +715,7 @@ def generate_review_summary(request, product_id):
         if 'Claude' in request.GET.get('llm'):
             #Inference parameters for Claude Anthropic
             inference_modifier = {}
-            inference_modifier['max_tokens_to_sample'] = int(request.GET.get('claude_max_tokens_to_sample') or 200)
+            inference_modifier['max_tokens_to_sample'] = int(request.GET.get('claude_max_tokens_to_sample') or 1024)
             inference_modifier['temperature'] = float(request.GET.get('claude_temperature') or 0.5)
             inference_modifier['top_k'] = int(request.GET.get('claude_top_k') or 250)
             inference_modifier['top_p'] = float(request.GET.get('claude_top_p') or 1)
@@ -732,7 +732,7 @@ def generate_review_summary(request, product_id):
         elif 'Titan' in request.GET.get('llm'):
             #Inference parameters for Titan
             inference_modifier = {}
-            inference_modifier['maxTokenCount'] = int(request.GET.get('titan_max_tokens_to_sample') or 200)
+            inference_modifier['maxTokenCount'] = int(request.GET.get('titan_max_tokens_to_sample') or 1024)
             inference_modifier['temperature'] = float(request.GET.get('titan_temperature') or 0.5)
             inference_modifier['topP'] = int(request.GET.get('titan_top_p') or 250)
 
@@ -813,7 +813,6 @@ def ask_question(request):
             4. Use "like" and upper() for string comparison on both left hand side and right hand side of the expression. For example, if the query contains "jackets", use "where upper(product_name) like upper('%jacket%')". 
             5. If the question is generic, like "where is mount everest" or "who went to the moon first", then do not generate any query in <query></query> and do not answer the question in any form. Instead, mention that the answer is not found in context.
             6. If the question is not related to the schema, then do not generate any query in <query></query> and do not answer the question in any form. Instead, mention that the answer is not found in context.  
-            7. If the question is asked in a language other than English, convert the question into English before constructing the SQL query. The string and varchar fields stored in the database are always in English. 
 
             <schema>
                 {schema}
