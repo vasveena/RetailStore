@@ -127,6 +127,7 @@ SQLAlchemy==2.0.22
 sqlparse==0.4.4
 stack-data==0.6.3
 tenacity==8.2.3
+tensorflow==2.15.0
 terminado==0.17.1
 tifffile==2023.9.26
 tinycss2==1.2.1

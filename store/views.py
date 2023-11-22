@@ -402,6 +402,7 @@ def generate_product_description(request, product_id):
         prompt_template = PromptTemplate(
             input_variables=["brand", "colors", "category", "length", "name","details"], 
             template="""
+
                     Human: Create a catchy product description for a {category} from the brand {brand}. 
                     Product name is {name}. 
                     The number of words should be less than {length}. 
@@ -492,6 +493,7 @@ def create_review_response(request, product_id, review_id):
         prompt_template = PromptTemplate(
             input_variables=["product_name","customer_name","manager_name","email","phone","length","review"], 
             template="""
+
                     Human: 
                     
                     I'm the manager of re:Invent retails. 
@@ -700,6 +702,9 @@ def generate_review_summary(request, product_id):
     # get all customer reviews for this product
     product_reviews = ReviewRating.objects.filter(product=single_product)
 
+    chunk_size = int(request.GET.get('chunk_size') or 4000)
+    chunk_overlap = int(request.GET.get('chunk_overlap') or 100)
+
     # get a list of customer reviews for this product and enclose them in <review></review> tags
     # this will be used in the prompt template for summarizing customer reviews
     # doing it this way helps LLM understand our instruction better
@@ -709,6 +714,13 @@ def generate_review_summary(request, product_id):
         review_digest += "<review>" + '\n'
         review_digest += review.review + '\n'
         review_digest += "</review>" + '\n\n'
+
+    from langchain.text_splitter import RecursiveCharacterTextSplitter
+    text_splitter = RecursiveCharacterTextSplitter(
+        separators=["\n\n", "\n"], chunk_size=chunk_size, chunk_overlap=chunk_overlap
+    )
+
+    customer_reviews = text_splitter.create_documents([review_digest])
 
     try:
         # If user chose Claude
@@ -722,7 +734,7 @@ def generate_review_summary(request, product_id):
             inference_modifier['stop_sequences'] = ["\n\nHuman"]
 
             # Initialize Claude LLM
-            textgen_llm = Bedrock(
+            textsumm_llm = Bedrock(
                 model_id="anthropic.claude-instant-v1",
                 client=boto3_bedrock,
                 model_kwargs=inference_modifier,
@@ -737,8 +749,8 @@ def generate_review_summary(request, product_id):
             inference_modifier['topP'] = int(request.GET.get('titan_top_p') or 250)
 
             # Initialize Titan LLM
-            textgen_llm = Bedrock(
-                model_id="amazon.titan-tg1-large",
+            textsumm_llm = Bedrock(
+                model_id="amazon.titan-text-express-v1",
                 client=boto3_bedrock,
                 model_kwargs=inference_modifier,
                 )
@@ -747,31 +759,69 @@ def generate_review_summary(request, product_id):
             pass
 
         # Create prompt for summarizing customer reviews. Passing product name and all the customer reviews as parameters to the prompt template. 
-        prompt_template = PromptTemplate(
-            input_variables=["product_name","reviews"],
-            template="""
+        summary_prompt='''
 
-                Human: Provide a review summary including pros and cons based on the customer reviews for the product {product_name}. This summary will be updated in the product webpage. Customer reviews are enclosed in <customer_reviews> tag. 
-        
-                <customer_reviews>
-                    {reviews}
-                <customer_reviews>
+            Human: 
+
+            Your task is to summarize the customer reviews for the product {product_name}. 
+            Following are the customer reviews enclosed in <customer_reviews> tag. 
+            
+            <customer_reviews>
+                `{text}`
+            </customer_reviews>
+            
+            <example_review_summary_format>
+
+            Here's a customer review summary of {product_name}
+            Pros:
                 
-                Assistant:
+                - pro 1
+                - pro 2 
+                
+            Cons:
+            
+                - con 1 
+                - con 2
+            
+            Overall summary of the customer reviews. 
 
-                """
-            )
+            </example_review_summary_format>
+
+            Do not suggest the customer to make a purchasing decision. 
+            Overall summary should be objective and should only echo the customer reviews.
+            
+            
+            Assistant:
+            
+        '''
         
         # Pass in values to the prompt template
-        prompt = prompt_template.format(product_name=single_product.product_name,
-                                         reviews=review_digest)
+        summary_prompt_template = PromptTemplate(
+            template=summary_prompt, 
+            input_variables=['product_name','text']
+        )
+
+        summary_prompt_string = summary_prompt_template.format(product_name=single_product.product_name, text=customer_reviews)
+
+        # Set verbose=True if you want to see the prompts being used
+        from langchain.chains.summarize import load_summarize_chain
+
+        summary_chain = load_summarize_chain (
+            llm=textsumm_llm,
+            chain_type='stuff',
+            prompt=summary_prompt_template,
+            verbose=False
+        )
 
         # Generate review summary using prompt constructed above
-        response = textgen_llm(prompt)
+        summary=summary_chain.run({
+                "product_name": single_product.product_name,
+                "input_documents": customer_reviews
+                })
 
         # Set session parameters to use in HTML template
-        request.session['generated_summary'] = response
-        request.session['summary_prompt'] = prompt
+        request.session['generated_summary'] = summary
+        request.session['summary_prompt'] = summary_prompt_string
         request.session['summary_flag'] = True
         request.session.modified = True
 
@@ -805,10 +855,11 @@ def ask_question(request):
         # We are passing PostgresQL documentation to help with the SQL generation. 
         # Generated query will be embedded in <query></query> tags
         prompt_template = """
+
             Human: Create an Postgres SQL query for a retail website to answer the question keeping the following rules in mind: 
             
             1. Database is implemented in Postgres SQL.
-            2. Postgres syntax details can be found here: https://www.postgresql.org/files/documentation/pdf/15/postgresql-15-US.pdf
+            2. Follow the Postgres syntax carefully while generating the query.
             3. Enclose the query in <query></query>. 
             4. Use "like" and upper() for string comparison on both left hand side and right hand side of the expression. For example, if the query contains "jackets", use "where upper(product_name) like upper('%jacket%')". 
             5. If the question is generic, like "where is mount everest" or "who went to the moon first", then do not generate any query in <query></query> and do not answer the question in any form. Instead, mention that the answer is not found in context.
