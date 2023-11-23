@@ -702,7 +702,7 @@ def generate_review_summary(request, product_id):
     # Get all customer reviews for this product
     product_reviews = ReviewRating.objects.filter(product=single_product)
 
-    chunk_size = int(request.GET.get('chunk_size') or 4000)
+    chunk_size = int(request.GET.get('chunk_size') or 1000)
     chunk_overlap = int(request.GET.get('chunk_overlap') or 100)
 
     # Get a list of customer reviews for this product and enclose them in <review></review> tags
