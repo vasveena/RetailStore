@@ -377,21 +377,21 @@ def generate_product_description(request, product_id):
         product_details = request.GET.get('product_details')
         max_length = request.GET.get('wordrange')
 
-        # get inference parameters from form for Claude Anthropic
+        #Inference parameters for Jurassic AI21
         inference_modifier = {}
-        inference_modifier['max_tokens_to_sample'] = int(request.GET.get('max_tokens_to_sample') or 200)
+        inference_modifier['maxTokens'] = int(request.GET.get('max_tokens_to_sample') or 200)
         inference_modifier['temperature'] = float(request.GET.get('temperature') or 0.5)
-        inference_modifier['top_k'] = int(request.GET.get('top_k') or 250)
-        inference_modifier['top_p'] = float(request.GET.get('top_p') or 1)
-        inference_modifier['stop_sequences'] = ["\n\nHuman"]
+        inference_modifier['topP'] = float(request.GET.get('top_p') or 1)
+        inference_modifier['stopSequences'] = ["\n\nHuman"]
 
-        # Initialize LLM
-        textgen_llm = Bedrock(
-            model_id="anthropic.claude-instant-v1",
+        # Initialize Jurassic AI21 LLM
+
+        ai21_llm = Bedrock(
+            model_id="ai21.j2-ultra",
             client=boto3_bedrock,
             model_kwargs=inference_modifier,
         )
-        
+
         # Create a prompt template that has 6 input variables: 
         # product name
         # product brand
@@ -437,10 +437,7 @@ def generate_product_description(request, product_id):
                                          details=product_details)
         
         # generate product description from Bedrock with the constructed prompt
-        response = textgen_llm(prompt)
-
-        # get the second paragraph i.e, only the product description 
-        generated_description = response[response.index('\n')+1:]
+        generated_description = ai21_llm(prompt)
 
     except Exception as e:
         raise e
@@ -474,17 +471,18 @@ def create_review_response(request, product_id, review_id):
         review_text = review.review
         max_length = request.GET.get('wordrange')
 
-        #Inference parameters for Claude Anthropic
+        # Inference parameters for Cohere
         inference_modifier = {}
-        inference_modifier['max_tokens_to_sample'] = int(request.GET.get('max_tokens_to_sample') or 200)
+        inference_modifier['max_tokens'] = int(request.GET.get('max_tokens_to_sample') or 200)
         inference_modifier['temperature'] = float(request.GET.get('temperature') or 0.5)
-        inference_modifier['top_k'] = int(request.GET.get('top_k') or 250)
-        inference_modifier['top_p'] = float(request.GET.get('top_p') or 1)
+        inference_modifier['k'] = int(request.GET.get('top_k') or 250)
+        inference_modifier['p'] = float(request.GET.get('top_p') or 1)
         inference_modifier['stop_sequences'] = ["\n\nHuman"]
 
-        # Initialize LLM
-        textgen_llm = Bedrock(
-            model_id="anthropic.claude-instant-v1",
+        # Initialize Cohere LLM
+
+        cohere_llm = Bedrock(
+            model_id="cohere.command-text-v14",
             client=boto3_bedrock,
             model_kwargs=inference_modifier,
         )
@@ -538,7 +536,7 @@ def create_review_response(request, product_id, review_id):
                                          review=review_text)
         
         # Generate response to customer review using prompt constructed above
-        response = textgen_llm(prompt)
+        response = cohere_llm(prompt)
 
         # Get the second paragraph i.e, only the response to customer review
         generated_response = response[response.index('\n')+1:]
@@ -646,7 +644,7 @@ def create_design_ideas(request, product_id):
                     })
             
             # Invoke Stable Diffusion model
-            response = boto3_bedrock.invoke_model(body=sd_request, modelId="stability.stable-diffusion-xl")
+            response = boto3_bedrock.invoke_model(body=sd_request, modelId="stability.stable-diffusion-xl-v1")
 
             # Extract image from response body
             response_body = json.loads(response.get("body").read())
@@ -726,7 +724,7 @@ def generate_review_summary(request, product_id):
     try:
         # If user chose Claude
         if 'Claude' in request.POST.get('llm'):
-            #Inference parameters for Claude Anthropic
+            #Inference parameters for Anthropic Claude
             inference_modifier = {}
             inference_modifier['max_tokens_to_sample'] = int(request.POST.get('claude_max_tokens_to_sample') or 1024)
             inference_modifier['temperature'] = float(request.POST.get('claude_temperature') or 0.5)
@@ -734,22 +732,22 @@ def generate_review_summary(request, product_id):
             inference_modifier['top_p'] = float(request.POST.get('claude_top_p') or 1)
             inference_modifier['stop_sequences'] = ["\n\nHuman"]
 
-            # Initialize Claude LLM
+            # Initialize Anthropic Claude LLM
             textsumm_llm = Bedrock(
-                model_id="anthropic.claude-instant-v1",
+                model_id="anthropic.claude-v2:1",
                 client=boto3_bedrock,
                 model_kwargs=inference_modifier,
             )
         
-         # If user chose Titan
+         # If user chose Amazon Titan
         elif 'Titan' in request.POST.get('llm'):
-            #Inference parameters for Titan
+            #Inference parameters for Amazon Titan
             inference_modifier = {}
             inference_modifier['maxTokenCount'] = int(request.POST.get('titan_max_tokens_to_sample') or 1024)
             inference_modifier['temperature'] = float(request.POST.get('titan_temperature') or 0.5)
             inference_modifier['topP'] = int(request.POST.get('titan_top_p') or 250)
 
-            # Initialize Titan LLM
+            # Initialize Amazon Titan LLM
             textsumm_llm = Bedrock(
                 model_id="amazon.titan-text-express-v1",
                 client=boto3_bedrock,
@@ -882,15 +880,18 @@ def ask_question(request):
         # Prompt template variables
         prompt_vars = PromptTemplate(template=prompt_template, input_variables=["question","schema"])
             
-        # Initialize LLM
-        llm = Bedrock(model_id="anthropic.claude-instant-v1", client=boto3_bedrock)
+        # Initialize Anthropic Claude LLM
+        claude_llm = Bedrock(
+                model_id="anthropic.claude-v2:1",
+                client=boto3_bedrock
+            )
         
         # Pass question and postgres schema of the web application
         prompt = prompt_vars.format(question=question, schema=schema)
 
         try: 
             # Invoke LLM and get response
-            llm_response = llm(prompt)
+            llm_response = claude_llm(prompt)
 
             # Check if query is generated under <query></query> tags as instructed in our prompt
             if "<query>".upper() not in llm_response.upper():
@@ -968,7 +969,7 @@ def ask_question(request):
                 prompt = prompt_vars.format(question=question, resultset=resultset)
 
                 # Invoke LLM and get response
-                describe_query_result = llm(prompt)
+                describe_query_result = claude_llm(prompt)
                 print("describe_query_result " + describe_query_result)
 
                 # If length of response is 0, then set response to "Sorry, I could not answer that question."
